@@ -1,41 +1,11 @@
-# Virtual environments
 .venv/
-.env
-.env.*
-
-# Python caches and build artifacts
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.pdb
-*.pkl
-build/
-dist/
 *.egg-info/
-
-# Test and coverage
-.pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
-coverage.xml
-
-# Linters and tooling caches
+.env
+.vector_store/
+.cache/
 .mypy_cache/
-.ruff_cache/
-
-# Editors/OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Logs
-*.log
-
-# Misc project
-*.sqlite3
+.pytest_cache/
