@@ -21,4 +21,8 @@ class ChromaStore:
             self._db.add_documents(docs)
 
     def persist(self) -> None:
-        self._db.persist()
+        # In some versions of langchain-chroma, the wrapper has no persist();
+        # the underlying client does. Safely call it if present.
+        client = getattr(self._db, "_client", None)
+        if client and hasattr(client, "persist"):
+            client.persist()
