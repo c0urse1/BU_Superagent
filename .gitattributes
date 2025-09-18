@@ -1,0 +1,11 @@
+# Normalize line endings and mark text files
+* text=auto eol=lf
+
+# Keep binaries untouched
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.zip binary
+*.gz binary
