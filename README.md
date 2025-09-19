@@ -77,15 +77,56 @@ OpenAI embeddings are opt-in and must follow your “Sicherheit, Datenschutz, Co
 
 Set `EMBEDDINGS__PROVIDER=openai` and `OPENAI_API_KEY`. For Azure/OpenAI-compatible endpoints, set `EMBEDDINGS__OPENAI_BASE_URL`.
 
+## Sentence-aware chunking (default)
+
+Ingestion now uses a sentence-aware splitter by default for development. The goal is to produce semantically coherent chunks and reduce “empty” mini-chunks that can hurt retrieval quality.
+
+- Pre-segmentation: Text is split into sentences first. If the optional `syntok` package is available, it’s used; otherwise a robust regex heuristic is applied.
+- Greedy packing: Sentences are packed into chunks up to `chunk_size` characters without cutting inside a sentence. A small soft overflow (`chunk_max_overflow`) is allowed to avoid leaving a tiny remainder.
+- Merge tiny neighbors: After packing, adjacent small chunks from the same source and page are merged if they’re individually tiny or if their combined size is below a threshold (`chunk_min_merge_char_len`). This reduces low-signal fragments.
+
+Defaults (development):
+
+- mode: `sentence_aware`
+- chunk_size: `1000`
+- chunk_overlap: `150`
+- chunk_max_overflow: `200`
+- chunk_min_merge_char_len: `500`
+
+Configuration:
+
+- Infra/Core path: Adjust `AppSettings().chunking` in `src/core/settings.py` (programmatic defaults). Example:
+
+	```python
+	from src.core.settings import AppSettings
+
+	cfg = AppSettings()
+	cfg.chunking.mode = "sentence_aware"  # or "recursive"
+	cfg.chunking.chunk_size = 1000
+	cfg.chunking.chunk_overlap = 150
+	```
+
+- CLI path: The `bu_kb` CLI uses sentence-aware by default. You can control the size/overlap via flags during ingestion:
+
+	```powershell
+	python -m bu_kb.cli ingest --source data\pdfs --persist .vector_store\chroma --collection bu_knowledge --chunk-size 1000 --chunk-overlap 150
+	```
+
+Optional preview: Visualize chunk boundaries with the included helper script:
+
+```powershell
+type data\pdfs\Allianz_test.pdf | python scripts\preview_chunking.py --mode sentence_aware --chunk-size 1000 --chunk-overlap 150
+```
+
 ## Quick usage cheatsheet
 
-```
-# Ingest with multilingual HF model (config via .env)
-python scripts/ingest_kb.py   # your existing ingestion entrypoint
+```powershell
+# Ingest with multilingual HF model (config via .env); sentence-aware chunking by default
+python -m bu_kb.cli ingest --source data\pdfs --persist .vector_store\chroma --collection bu_knowledge
 
-# Query
-python scripts/query_kb.py "Welche Gesundheitsfragen sind bei der BU relevant?" -k 5
+# Query via infra/core path
+python scripts\query_kb.py "Welche Gesundheitsfragen sind bei der BU relevant?" -k 5
 
 # Evaluate models head-to-head
-python scripts/eval_embeddings.py
+python scripts\eval_embeddings.py
 ```
