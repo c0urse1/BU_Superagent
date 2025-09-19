@@ -17,11 +17,38 @@ def main() -> None:
     parser.add_argument("-k", type=int, default=5)
     parser.add_argument("--category")
     parser.add_argument("--section")
+    # Embedding overrides to align with a specific collection/signature
+    parser.add_argument(
+        "--provider",
+        choices=["huggingface", "openai", "dummy"],
+        help="Embeddings provider override (default from AppSettings)",
+    )
+    parser.add_argument("--model", help="Embedding model name override")
+    parser.add_argument(
+        "--device",
+        help='Device override, e.g. "cpu", "cuda", "cuda:0", "mps" (default from AppSettings)',
+    )
+    parser.add_argument(
+        "--no-normalize",
+        action="store_true",
+        help="Disable embedding vector normalization (defaults to enabled)",
+    )
     args = parser.parse_args()
 
     cfg = AppSettings()  # defaults; wire pydantic-settings if you want .env loading
-    emb = build_embeddings(cfg.embeddings)
-    collection = collection_name_for(cfg.kb.collection_base, cfg.embeddings.signature)
+    # Apply optional overrides to embeddings config
+    emb_cfg = cfg.embeddings.model_copy()
+    if args.provider:
+        emb_cfg.provider = args.provider
+    if args.model:
+        emb_cfg.model_name = args.model
+    if args.device:
+        emb_cfg.device = args.device
+    if args.no_normalize:
+        emb_cfg.normalize_embeddings = False
+
+    emb = build_embeddings(emb_cfg)
+    collection = collection_name_for(cfg.kb.collection_base, emb_cfg.signature)
 
     store = ChromaStore(
         collection,
@@ -30,7 +57,7 @@ def main() -> None:
     )
 
     # Build filter dict
-    md_filter: dict[str, object] = {"embedding_sig": cfg.embeddings.signature}
+    md_filter: dict[str, object] = {"embedding_sig": emb_cfg.signature}
     if args.category:
         md_filter["category"] = args.category
     if args.section:

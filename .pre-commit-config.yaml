@@ -19,10 +19,22 @@ repos:
   # Optional but useful: quick test run before commit
   - repo: local
     hooks:
+      # Fast unit subset on commit: exclude potentially slow/integration tests
+      - id: pytest-fast
+        name: pytest (fast)
+        entry: C:/BU_SUPERAGENT/.venv/Scripts/python.exe
+        language: system
+        stages: [commit]
+        pass_filenames: false
+        timeout: 120
+        args: ["-m", "pytest", "-q", "--maxfail=1", "--no-cov", "-m", "not slow"]
+
+      # Full suite on push
       - id: pytest
-        name: pytest (pre-push)
+        name: pytest (full)
         entry: C:/BU_SUPERAGENT/.venv/Scripts/python.exe
         language: system
         stages: [push]
         pass_filenames: false
+        timeout: 600
         args: ["-m", "pytest", "-q", "--maxfail=1", "--no-cov"]

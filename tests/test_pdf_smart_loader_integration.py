@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from src.bu_kb.ingest.loaders import PdfLoader
 from src.bu_kb.ingest.splitters import TextSplitterAdapter
 from src.infra.splitting.factory import build_splitter
 
 
+@pytest.mark.slow
 def test_pdf_loader_enriches_metadata() -> None:
     pdf = Path("data/pdfs/Allianz_test.pdf")
     assert pdf.exists(), "Sample PDF missing for test"
@@ -28,6 +31,7 @@ def test_pdf_loader_enriches_metadata() -> None:
         assert (v is None) or isinstance(v, str)
 
 
+@pytest.mark.slow
 def test_splitters_propagate_metadata_sentence_aware() -> None:
     pdf = Path("data/pdfs/Allianz_test.pdf")
     loader = PdfLoader()
@@ -42,6 +46,7 @@ def test_splitters_propagate_metadata_sentence_aware() -> None:
         assert key in md
 
 
+@pytest.mark.slow
 def test_splitters_propagate_metadata_recursive() -> None:
     pdf = Path("data/pdfs/Allianz_test.pdf")
     loader = PdfLoader()

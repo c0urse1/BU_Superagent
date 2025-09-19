@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
 from src.infra.pdf.category import infer_category_from_path
 from src.infra.pdf.pdf_metadata import extract_pdf_docinfo
@@ -10,6 +12,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Preview PDF title/TOC/section mapping.")
     ap.add_argument("pdf_path")
     args = ap.parse_args()
+
+    pdf_path = Path(args.pdf_path)
+    if not pdf_path.exists():
+        sys.stderr.write(f"Error: file not found: {pdf_path}\n")
+        sys.exit(2)
 
     info = extract_pdf_docinfo(args.pdf_path)
     cat = infer_category_from_path(args.pdf_path)
