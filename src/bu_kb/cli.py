@@ -58,10 +58,10 @@ def ingest(
     chunking = getattr(settings, "chunking", None)
     chunking_mode = getattr(chunking, "mode", getattr(settings, "chunking_mode", "sentence_aware"))
     chunk_max_overflow = getattr(
-        chunking, "chunk_max_overflow", getattr(settings, "chunk_max_overflow", 200)
+        chunking, "max_overflow", getattr(settings, "chunk_max_overflow", 200)
     )
     chunk_min_merge_char_len = getattr(
-        chunking, "chunk_min_merge_char_len", getattr(settings, "chunk_min_merge_char_len", 500)
+        chunking, "min_merge_char_len", getattr(settings, "chunk_min_merge_char_len", 500)
     )
     _mode_str = str(chunking_mode)
     if _mode_str not in ("sentence_aware", "recursive"):

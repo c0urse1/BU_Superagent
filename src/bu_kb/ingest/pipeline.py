@@ -39,7 +39,7 @@ class IngestionPipeline:
                     from src.core.settings import AppSettings
 
                     _cfg = AppSettings()
-                    _min_merge = int(getattr(_cfg.chunking, "chunk_min_merge_char_len", 500))
+                    _min_merge = int(getattr(_cfg.chunking, "min_merge_char_len", 500))
                     _mode = str(getattr(_cfg.chunking, "mode", "sentence_aware"))
                 except Exception:  # noqa: BLE001 - be resilient in CLI/legacy contexts
                     _min_merge = 500

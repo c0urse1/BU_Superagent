@@ -31,18 +31,16 @@ class KBSettings(BaseModel):
     persist_directory: str = ".vector_store/chroma"
 
 
+class ChunkingConfig(BaseModel):
+    """Configuration for text chunking modes and parameters."""
+    mode: str = Field(default="sentence_aware")  # or "recursive"
+    chunk_size: int = 1000
+    chunk_overlap: int = 150
+    max_overflow: int = 200  # renamed for consistency with factory
+    min_merge_char_len: int = 500  # renamed for consistency with factory
+
+
 class AppSettings(BaseModel):
     embeddings: EmbeddingConfig = EmbeddingConfig()
     kb: KBSettings = KBSettings()
-
-    # Chunking configuration (used by sentence-aware or recursive splitters)
-    class ChunkingConfig(BaseModel):
-        mode: str = Field(default="sentence_aware")  # or "recursive"
-        chunk_size: int = 1000
-        chunk_overlap: int = 150
-        chunk_max_overflow: int = 200
-        chunk_min_merge_char_len: int = 500
-
-    chunking: AppSettings.ChunkingConfig = Field(
-        default_factory=lambda: AppSettings.ChunkingConfig()
-    )
+    chunking: ChunkingConfig = Field(default_factory=ChunkingConfig)
