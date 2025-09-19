@@ -9,7 +9,9 @@ Provider = Literal["huggingface", "openai", "dummy"]
 
 class EmbeddingConfig(BaseModel):
     provider: Provider = Field(default="huggingface")
-    model_name: str = Field(default="sentence-transformers/all-MiniLM-L6-v2")
+    # Default multilingual model for DE-heavy corpora; override to
+    # "sentence-transformers/all-MiniLM-L6-v2" for a smaller English-focused model.
+    model_name: str = Field(default="sentence-transformers/paraphrase-multilingual-mpnet-base-v2")
     device: str = Field(default="auto")  # "auto" | "cpu" | "cuda"
     normalize_embeddings: bool = True
     # OpenAI specific
