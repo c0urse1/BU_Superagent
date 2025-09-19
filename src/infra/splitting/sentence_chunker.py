@@ -102,8 +102,14 @@ class SentenceAwareChunker(TextSplitterLike):
                 same_src = (cur.metadata or {}).get("source") == (nxt.metadata or {}).get("source")
                 same_page = (cur.metadata or {}).get("page") == (nxt.metadata or {}).get("page")
                 if same_src and same_page:
-                    combined_len = len(cur.page_content or "") + len(nxt.page_content or "")
-                    if combined_len < self.p.min_merge_char_len:
+                    cur_len = len(cur.page_content or "")
+                    nxt_len = len(nxt.page_content or "")
+                    combined_len = cur_len + nxt_len
+                    if (
+                        combined_len < self.p.min_merge_char_len
+                        or cur_len < self.p.min_merge_char_len
+                        or nxt_len < self.p.min_merge_char_len
+                    ):
                         text = ((cur.page_content or "") + "\n" + (nxt.page_content or "")).strip()
                         md = {**(cur.metadata or {})}
                         md["char_len"] = combined_len
