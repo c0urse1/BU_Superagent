@@ -77,12 +77,18 @@ class ChromaStore:
     ) -> Any:
         """Return a LangChain retriever. If score_threshold is set, prunes low-relevance hits."""
         if score_threshold is not None:
+            kwargs: dict[str, Any] = {
+                "k": max(k, 10),
+                "score_threshold": float(score_threshold),
+            }
+            if filter is not None:
+                kwargs["filter"] = filter
             return self._db.as_retriever(
                 search_type="similarity_score_threshold",
-                search_kwargs={
-                    "k": max(k, 10),
-                    "score_threshold": float(score_threshold),
-                    "filter": filter or {},
-                },
+                search_kwargs=kwargs,
             )
-        return self._db.as_retriever(search_kwargs={"k": k, "filter": filter or {}})
+
+        kwargs2: dict[str, Any] = {"k": k}
+        if filter is not None:
+            kwargs2["filter"] = filter
+        return self._db.as_retriever(search_kwargs=kwargs2)

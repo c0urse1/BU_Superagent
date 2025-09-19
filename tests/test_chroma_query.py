@@ -66,3 +66,25 @@ def test_query_returns_relevant_chunk(tmp_path: Path) -> None:
     hits = store.query("Vorerkrankungen", k=1)
     assert hits, "Expected at least one result"
     assert "Vorerkrankungen" in hits[0].page_content
+
+
+def test_get_retriever_returns_docs(tmp_path: Path) -> None:
+    persist_dir = tmp_path / "chroma2"
+    persist_dir.mkdir(parents=True, exist_ok=True)
+
+    store = ChromaStore(
+        collection="test_collection_2",
+        persist_dir=persist_dir,
+        embedder=DummyEmbeddings(),
+    )
+
+    docs = [
+        Document(page_content="Leitfaden zur Gesundheitsprüfung in der BU."),
+        Document(page_content="Ausschlüsse bei Hochrisiko-Hobbys."),
+    ]
+    store.add_documents(docs)
+    store.persist()
+
+    retriever = store.get_retriever(k=2)
+    results = retriever.get_relevant_documents("Gesundheitsprüfung")
+    assert results and "Gesundheitsprüfung" in results[0].page_content
