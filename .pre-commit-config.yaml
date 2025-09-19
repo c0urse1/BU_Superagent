@@ -20,9 +20,9 @@ repos:
   - repo: local
     hooks:
       - id: pytest
-        name: pytest
+        name: pytest (pre-push)
         entry: C:/BU_SUPERAGENT/.venv/Scripts/python.exe
         language: system
+        stages: [push]
         pass_filenames: false
-        files: ^tests/.*\.py$
-        args: ["-m", "pytest", "-q", "--no-cov"]
+        args: ["-m", "pytest", "-q", "--maxfail=1", "--no-cov"]
