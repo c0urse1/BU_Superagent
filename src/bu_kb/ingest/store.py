@@ -5,11 +5,18 @@ from typing import Any
 
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
+
+try:  # Prefer core interface; tolerate older installs
+    from langchain_core.embeddings import Embeddings as LCEmbeddings
+except Exception:  # pragma: no cover
+    try:
+        from langchain.embeddings.base import Embeddings as LCEmbeddings
+    except Exception:  # pragma: no cover
+        from typing import Any as LCEmbeddings
 
 
 class ChromaStore:
-    def __init__(self, collection: str, persist_dir: Path, embedder: HuggingFaceEmbeddings) -> None:
+    def __init__(self, collection: str, persist_dir: Path, embedder: LCEmbeddings) -> None:
         persist_dir.mkdir(parents=True, exist_ok=True)
         self._db = Chroma(
             collection_name=collection,

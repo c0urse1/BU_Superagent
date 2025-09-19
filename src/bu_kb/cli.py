@@ -9,11 +9,12 @@ from typing import Literal, cast
 
 import typer
 
+from src.core.settings import AppSettings
+from src.infra.embeddings.factory import build_embeddings
 from src.infra.splitting.factory import build_splitter
 
 from .config import settings
 from .exceptions import ConfigurationError
-from .ingest.embeddings import build_embedder
 from .ingest.loaders import PdfLoader
 from .ingest.pipeline import IngestionPipeline
 from .ingest.splitters import TextSplitterAdapter
@@ -38,7 +39,12 @@ def ingest(
     cfg_source = Path(source) if source else settings.source_dir
     cfg_persist = Path(persist) if persist else settings.persist_dir
     cfg_collection = collection or settings.collection_name
-    cfg_model = model or settings.embedding_model
+    # Build device-aware embeddings via infra settings
+    app_cfg = AppSettings()
+    if model:
+        # CLI override for model name
+        app_cfg.embeddings.model_name = model
+    emb = build_embeddings(app_cfg.embeddings)
     cfg_chunk_size = chunk_size or settings.chunk_size
     cfg_chunk_overlap = chunk_overlap or settings.chunk_overlap
 
@@ -50,8 +56,23 @@ def ingest(
         typer.echo(f"No PDFs found under {cfg_source}")
         raise typer.Exit(code=0)
 
-    embedder = build_embedder(cfg_model)
-    store = ChromaStore(cfg_collection, cfg_persist, embedder)
+    # Observability: log embedding/model/provider/device/batch
+    try:
+        # Resolve device similarly to factory behavior for clarity in logs
+        from src.infra.embeddings.device import resolve_device
+
+        resolved_device = resolve_device(app_cfg.embeddings.device)
+    except Exception:
+        resolved_device = getattr(app_cfg.embeddings, "device", "auto")
+    logging.getLogger(__name__).info(
+        "[ingest] embeddings=%s provider=%s device=%s (resolved) batch_size=%s",
+        app_cfg.embeddings.model_name,
+        app_cfg.embeddings.provider,
+        resolved_device,
+        app_cfg.embeddings.batch_size,
+    )
+
+    store = ChromaStore(cfg_collection, cfg_persist, emb)
 
     # Build configurable splitter (default: sentence-aware); fall back via getattr defaults
     # Prefer core AppSettings.chunking if present, else fall back to legacy attributes

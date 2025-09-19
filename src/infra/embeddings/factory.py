@@ -24,29 +24,22 @@ except Exception:  # pragma: no cover
     OpenAIEmbeddings = None
 
 from src.core.settings import EmbeddingConfig
-
-
-def _auto_device() -> str:
-    try:
-        import torch  # noqa: F401
-
-        # Prefer CUDA if available
-        import torch as _torch
-
-        return "cuda" if _torch.cuda.is_available() else "cpu"
-    except Exception:  # pragma: no cover
-        return "cpu"
+from src.infra.embeddings.device import resolve_device
 
 
 def build_embeddings(cfg: EmbeddingConfig) -> Embeddings:
     provider = cfg.provider.lower()
-    device = cfg.device if cfg.device != "auto" else _auto_device()
+    device = resolve_device(cfg.device)
 
     if provider == "huggingface":
+        # SentenceTransformers supports 'cuda', 'cuda:0', 'cpu', and 'mps'
         return HuggingFaceEmbeddings(
             model_name=cfg.model_name,
             model_kwargs={"device": device},
-            encode_kwargs={"normalize_embeddings": cfg.normalize_embeddings},
+            encode_kwargs={
+                "normalize_embeddings": cfg.normalize_embeddings,
+                "batch_size": cfg.batch_size,
+            },
         )
 
     if provider == "openai":
