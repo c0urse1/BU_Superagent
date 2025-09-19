@@ -29,4 +29,20 @@ class RecursiveSplitter:
         )
 
     def split(self, docs: list[Document]) -> list[Document]:
-        return self._splitter.split_documents(docs)
+        chunks = self._splitter.split_documents(docs)
+        # Propagate/select metadata onto chunks if missing; normalize page/page_number
+        out: list[Document] = []
+        for ch in chunks:
+            meta = dict(getattr(ch, "metadata", None) or {})
+            # Normalize page number if only page_number exists
+            if "page" not in meta and "page_number" in meta:
+                try:
+                    meta["page"] = int(meta["page_number"])  # prefer 1-based if provided
+                except Exception:
+                    pass
+            # Ensure selected keys remain if present
+            for k in ("source", "title", "section", "category"):
+                if k in meta:
+                    meta[k] = meta[k]
+            out.append(Document(page_content=ch.page_content, metadata=meta))
+        return out
