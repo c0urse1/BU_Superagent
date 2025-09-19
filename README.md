@@ -76,3 +76,16 @@ OpenAI embeddings are opt-in and must follow your “Sicherheit, Datenschutz, Co
 - Human-in-the-loop: include review/override for critical decisions.
 
 Set `EMBEDDINGS__PROVIDER=openai` and `OPENAI_API_KEY`. For Azure/OpenAI-compatible endpoints, set `EMBEDDINGS__OPENAI_BASE_URL`.
+
+## Quick usage cheatsheet
+
+```
+# Ingest with multilingual HF model (config via .env)
+python scripts/ingest_kb.py   # your existing ingestion entrypoint
+
+# Query
+python scripts/query_kb.py "Welche Gesundheitsfragen sind bei der BU relevant?" -k 5
+
+# Evaluate models head-to-head
+python scripts/eval_embeddings.py
+```
