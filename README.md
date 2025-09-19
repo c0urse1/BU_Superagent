@@ -36,6 +36,9 @@ Configure the embedding provider/model through environment variables (see `.env.
 	- `EMBEDDINGS__MODEL_NAME=sentence-transformers/paraphrase-multilingual-mpnet-base-v2`
 - Alternative (smaller):
 	- `EMBEDDINGS__MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2`
+- Device and performance (optional):
+	- `EMBEDDINGS__DEVICE=auto`  # auto | cpu | cuda | cuda:0 | mps
+	- `EMBEDDINGS__BATCH_SIZE=32`  # larger batches = better GPU utilization
 - OpenAI (opt-in):
 	- `EMBEDDINGS__PROVIDER=openai`
 	- `EMBEDDINGS__MODEL_NAME=text-embedding-3-small`
@@ -141,6 +144,10 @@ EMBEDDINGS__DEVICE=cuda python scripts/ingest_kb.py
 
 # Apple Silicon MPS
 EMBEDDINGS__DEVICE=mps python scripts/ingest_kb.py
+
+# CLI flag overrides (alternative to env vars)
+python -m bu_kb.cli ingest --device cuda --batch-size 128 --source data/pdfs
+python -m bu_kb.cli ingest --device mps --batch-size 64 --source data/pdfs
 ```
 
 Windows equivalents:
