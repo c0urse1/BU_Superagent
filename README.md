@@ -130,3 +130,35 @@ python scripts\query_kb.py "Welche Gesundheitsfragen sind bei der BU relevant?" 
 # Evaluate models head-to-head
 python scripts\eval_embeddings.py
 ```
+
+### Quick usage cheatsheet (Windows cmd)
+
+1) Configure (optional)
+
+Sentence-aware mode is the default. If you’ve wired environment-backed `AppSettings` for the infra/core path, you can set chunking via env vars (cmd syntax shown):
+
+```cmd
+set CHUNKING__MODE=sentence_aware
+set CHUNKING__CHUNK_SIZE=1000
+set CHUNKING__CHUNK_OVERLAP=150
+set CHUNKING__CHUNK_MAX_OVERFLOW=200
+set CHUNKING__CHUNK_MIN_MERGE_CHAR_LEN=500
+```
+
+2) Ingest your PDFs (uses the sentence-aware splitter by default)
+
+```cmd
+python -m bu_kb.cli ingest --source data\pdfs --persist .vector_store\chroma --collection bu_knowledge
+```
+
+3) Sanity-check a text sample (preview chunking)
+
+```cmd
+echo Satz A. Sehr langer Satz B ... Satz C! | python scripts\preview_chunking.py --chunk-size 80 --chunk-overlap 20
+```
+
+4) Run tests
+
+```cmd
+pytest -q
+```
