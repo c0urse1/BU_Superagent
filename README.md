@@ -130,6 +130,33 @@ $env:EMBEDDINGS__DEVICE = "cuda"; $env:EMBEDDINGS__BATCH_SIZE = "128"; python -m
 set EMBEDDINGS__DEVICE=cuda && set EMBEDDINGS__BATCH_SIZE=128 && python -m bu_kb.cli ingest --source data\pdfs --persist .vector_store\chroma --collection bu_knowledge
 ```
 
+### Minimal device usage cheatsheet
+
+```bash
+# CPU (default)
+python scripts/ingest_kb.py
+
+# Force CUDA (if available)
+EMBEDDINGS__DEVICE=cuda python scripts/ingest_kb.py
+
+# Apple Silicon MPS
+EMBEDDINGS__DEVICE=mps python scripts/ingest_kb.py
+```
+
+Windows equivalents:
+
+```powershell
+# PowerShell
+$env:EMBEDDINGS__DEVICE = "cuda"; python scripts\ingest_kb.py
+$env:EMBEDDINGS__DEVICE = "mps"; python scripts\ingest_kb.py
+```
+
+```cmd
+# cmd.exe
+set EMBEDDINGS__DEVICE=cuda && python scripts\ingest_kb.py
+set EMBEDDINGS__DEVICE=mps && python scripts\ingest_kb.py
+```
+
 ## Quick usage cheatsheet
 
 ```powershell
