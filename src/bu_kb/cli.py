@@ -31,6 +31,14 @@ def ingest(
     persist: str = typer.Option(None, help="Directory to persist Chroma DB."),
     collection: str = typer.Option(None, help="Chroma collection name."),
     model: str = typer.Option(None, help="HuggingFace sentence-transformer model."),
+    device: str = typer.Option(
+        None,
+        help='Device for embeddings: "auto" | "cpu" | "cuda" | "cuda:0" | "mps"',
+    ),
+    batch_size: int = typer.Option(
+        None,
+        help="Batch size for sentence-transformers encode() (HuggingFace provider)",
+    ),
     chunk_size: int = typer.Option(None, help="Chunk size (chars)."),
     chunk_overlap: int = typer.Option(None, help="Chunk overlap (chars)."),
 ) -> None:
@@ -44,6 +52,10 @@ def ingest(
     if model:
         # CLI override for model name
         app_cfg.embeddings.model_name = model
+    if device:
+        app_cfg.embeddings.device = device
+    if batch_size:
+        app_cfg.embeddings.batch_size = int(batch_size)
     emb = build_embeddings(app_cfg.embeddings)
     cfg_chunk_size = chunk_size or settings.chunk_size
     cfg_chunk_overlap = chunk_overlap or settings.chunk_overlap
