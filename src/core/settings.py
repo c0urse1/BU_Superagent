@@ -12,7 +12,8 @@ class EmbeddingConfig(BaseModel):
     # Default multilingual model for DE-heavy corpora; override to
     # "sentence-transformers/all-MiniLM-L6-v2" for a smaller English-focused model.
     model_name: str = Field(default="sentence-transformers/paraphrase-multilingual-mpnet-base-v2")
-    device: str = Field(default="auto")  # "auto" | "cpu" | "cuda"
+    # Device selection for embeddings runtime: "auto" | "cpu" | "cuda" | "cuda:0" | "mps"
+    device: str = Field(default="auto")
     normalize_embeddings: bool = True
     # OpenAI specific
     openai_api_key: str | None = None
@@ -22,8 +23,11 @@ class EmbeddingConfig(BaseModel):
 
     @property
     def signature(self) -> str:
-        # Stable signature to tag collections / metadata
-        return f"{self.provider}:{self.model_name}:{'norm' if self.normalize_embeddings else 'raw'}"
+        # Stable signature to tag collections / metadata, includes device and normalization
+        return (
+            f"{self.provider}:{self.model_name}:{self.device}"
+            f":{'norm' if self.normalize_embeddings else 'raw'}"
+        )
 
 
 class KBSettings(BaseModel):

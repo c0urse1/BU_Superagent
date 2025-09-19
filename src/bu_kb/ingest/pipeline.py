@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -62,7 +63,12 @@ class IngestionPipeline:
                             **(getattr(d, "metadata", None) or {}),
                             "embedding_sig": self.embedding_signature,
                         }
+                # Timing: embedding + indexing path
+                t0 = time.perf_counter()
+                log.info("[ingest] timing started ...")
                 self.store.add_documents(chunks)
+                dt_ms = int((time.perf_counter() - t0) * 1000)
+                log.info("[ingest] embedding+indexing took %d ms", dt_ms)
                 chunks_total += len(chunks)
                 log.info("ingested %s -> %d chunks", pdf.name, len(chunks))
             except Exception as e:  # noqa: BLE001

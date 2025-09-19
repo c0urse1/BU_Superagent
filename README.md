@@ -14,6 +14,8 @@ See `.env.example` for a ready-to-copy configuration file. Examples:
 # Default HF (multilingual)
 EMBEDDINGS__PROVIDER=huggingface
 EMBEDDINGS__MODEL_NAME=sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+EMBEDDINGS__DEVICE=auto           # or "cuda", "cuda:0", "cpu", "mps"
+EMBEDDINGS__BATCH_SIZE=64         # tune for throughput vs. memory
 
 # OpenAI (opt-in)
 EMBEDDINGS__PROVIDER=openai
@@ -116,6 +118,43 @@ Optional preview: Visualize chunk boundaries with the included helper script:
 
 ```powershell
 type data\pdfs\Allianz_test.pdf | python scripts\preview_chunking.py --mode sentence_aware --chunk-size 1000 --chunk-overlap 150
+```
+
+### Device override and batch size (one-off runs)
+
+```powershell
+# Windows PowerShell example (adjust model as needed)
+$env:EMBEDDINGS__DEVICE = "cuda"; $env:EMBEDDINGS__BATCH_SIZE = "128"; python -m bu_kb.cli ingest --source data\pdfs --persist .vector_store\chroma --collection bu_knowledge
+
+# cmd.exe example
+set EMBEDDINGS__DEVICE=cuda && set EMBEDDINGS__BATCH_SIZE=128 && python -m bu_kb.cli ingest --source data\pdfs --persist .vector_store\chroma --collection bu_knowledge
+```
+
+### Minimal device usage cheatsheet
+
+```bash
+# CPU (default)
+python scripts/ingest_kb.py
+
+# Force CUDA (if available)
+EMBEDDINGS__DEVICE=cuda python scripts/ingest_kb.py
+
+# Apple Silicon MPS
+EMBEDDINGS__DEVICE=mps python scripts/ingest_kb.py
+```
+
+Windows equivalents:
+
+```powershell
+# PowerShell
+$env:EMBEDDINGS__DEVICE = "cuda"; python scripts\ingest_kb.py
+$env:EMBEDDINGS__DEVICE = "mps"; python scripts\ingest_kb.py
+```
+
+```cmd
+# cmd.exe
+set EMBEDDINGS__DEVICE=cuda && python scripts\ingest_kb.py
+set EMBEDDINGS__DEVICE=mps && python scripts\ingest_kb.py
 ```
 
 ## Quick usage cheatsheet
