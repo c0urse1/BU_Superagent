@@ -1,5 +1,38 @@
 # BU_Superagent
 
+## Dependency alignment
+
+This repo pins a compatible set of core libraries to avoid version drift:
+
+- langchain 0.3.27
+- langchain-community 0.3.29
+- langchain-text-splitters 0.3.11
+- langchain-huggingface 0.3.1
+- langchain-chroma 0.2.6
+- chromadb 1.1.0
+- sentence-transformers 3.0.1
+- PyMuPDF 1.26.4
+- pydantic 2.11.9, pydantic-settings 2.10.1
+
+Optional extras:
+
+- nlp extra: syntok (for better sentence segmentation if available)
+- openai extra: langchain-openai 0.3.33, openai 1.x (opt-in provider)
+
+Install (editable) with dev tools and optional extras:
+
+```cmd
+REM cmd.exe
+python -m pip install -e .[dev,nlp,openai]
+```
+
+```powershell
+# PowerShell
+python -m pip install -e .[dev,nlp,openai]
+```
+
+If you previously installed mismatched versions, re-run the command to reconcile.
+
 ## Embeddings configuration
 
 Embeddings are configurable via settings (see `src/core/settings.py`) and environment variables.
