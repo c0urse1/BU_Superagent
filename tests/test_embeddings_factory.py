@@ -20,3 +20,10 @@ def test_dummy_provider_embeds_deterministically() -> None:
     assert len(v1) > 0
     # Deterministic for same input
     assert v1 == v2
+
+
+def test_build_dummy_embeddings() -> None:
+    cfg = EmbeddingConfig(provider="dummy")
+    emb = build_embeddings(cfg)
+    v = emb.embed_query("Berufsunfähigkeit")
+    assert isinstance(v, list) and len(v) > 0
