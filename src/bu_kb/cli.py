@@ -5,15 +5,18 @@ import logging
 import sys
 import warnings
 from pathlib import Path
+from typing import Literal, cast
 
 import typer
+
+from src.infra.splitting.factory import build_splitter
 
 from .config import settings
 from .exceptions import ConfigurationError
 from .ingest.embeddings import build_embedder
 from .ingest.loaders import PdfLoader
 from .ingest.pipeline import IngestionPipeline
-from .ingest.splitters import RecursiveSplitter
+from .ingest.splitters import TextSplitterAdapter
 from .ingest.store import ChromaStore
 from .logging_setup import setup_logging
 from .query import QueryService
@@ -49,9 +52,31 @@ def ingest(
 
     embedder = build_embedder(cfg_model)
     store = ChromaStore(cfg_collection, cfg_persist, embedder)
+
+    # Build configurable splitter (default: sentence-aware); fall back via getattr defaults
+    # Prefer core AppSettings.chunking if present, else fall back to legacy attributes
+    chunking = getattr(settings, "chunking", None)
+    chunking_mode = getattr(chunking, "mode", getattr(settings, "chunking_mode", "sentence_aware"))
+    chunk_max_overflow = getattr(
+        chunking, "chunk_max_overflow", getattr(settings, "chunk_max_overflow", 200)
+    )
+    chunk_min_merge_char_len = getattr(
+        chunking, "chunk_min_merge_char_len", getattr(settings, "chunk_min_merge_char_len", 500)
+    )
+    _mode_str = str(chunking_mode)
+    if _mode_str not in ("sentence_aware", "recursive"):
+        _mode_str = "sentence_aware"
+    splitter_impl = build_splitter(
+        mode=cast(Literal["sentence_aware", "recursive"], _mode_str),
+        chunk_size=int(cfg_chunk_size),
+        chunk_overlap=int(cfg_chunk_overlap),
+        max_overflow=int(chunk_max_overflow),
+        min_merge_char_len=int(chunk_min_merge_char_len),
+    )
+
     pipeline = IngestionPipeline(
         loader=PdfLoader(),
-        splitter=RecursiveSplitter(cfg_chunk_size, cfg_chunk_overlap),
+        splitter=TextSplitterAdapter(splitter_impl),
         store=store,
     )
 
