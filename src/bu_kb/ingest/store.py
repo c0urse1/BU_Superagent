@@ -24,6 +24,25 @@ class ChromaStore:
             embedding_function=embedder,
         )
 
+    @staticmethod
+    def _normalize_filter(f: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Normalize a metadata filter for Chroma.
+
+        Recent Chroma versions expect a top-level operator (e.g., {"$and": [...]}) in the
+        "where" clause. LangChain passes our "filter" through as "where". For simple, single-key
+        filters we can pass {"field": value} directly; for multi-key dicts we wrap them in $and.
+        If the caller already provided an operator (key starts with "$"), pass it through.
+        """
+        if not f:
+            return f
+        # If already an operator at top-level, leave as-is
+        if any(str(k).startswith("$") for k in f.keys()):
+            return f
+        if len(f) <= 1:
+            return f
+        # Wrap multi-field filters into an explicit $and
+        return {"$and": [{k: v} for k, v in f.items()]}
+
     def add_documents(self, docs: list[Document]) -> None:
         if docs:
             self._db.add_documents(docs)
@@ -54,7 +73,7 @@ class ChromaStore:
         filter : dict | None
             Optional metadata filter (e.g., {"category": "rules"}).
         """
-        return self._db.similarity_search(text, k=k, filter=filter)
+        return self._db.similarity_search(text, k=k, filter=self._normalize_filter(filter))
 
     def query_with_scores(
         self,
@@ -68,11 +87,17 @@ class ChromaStore:
         Handles both modern and older LangChain method names.
         """
         if hasattr(self._db, "similarity_search_with_relevance_scores"):
-            return self._db.similarity_search_with_relevance_scores(text, k=k, filter=filter)
+            return self._db.similarity_search_with_relevance_scores(
+                text, k=k, filter=self._normalize_filter(filter)
+            )
         if hasattr(self._db, "similarity_search_with_score"):
-            return self._db.similarity_search_with_score(text, k=k, filter=filter)
+            return self._db.similarity_search_with_score(
+                text, k=k, filter=self._normalize_filter(filter)
+            )
         # Fallback to scoreless API; attach neutral score 0.0
-        docs: list[Document] = self._db.similarity_search(text, k=k, filter=filter)
+        docs: list[Document] = self._db.similarity_search(
+            text, k=k, filter=self._normalize_filter(filter)
+        )
         return [(d, 0.0) for d in docs]
 
     def get_retriever(
@@ -89,7 +114,7 @@ class ChromaStore:
                 "score_threshold": float(score_threshold),
             }
             if filter is not None:
-                kwargs["filter"] = filter
+                kwargs["filter"] = self._normalize_filter(filter)
             return self._db.as_retriever(
                 search_type="similarity_score_threshold",
                 search_kwargs=kwargs,
@@ -97,5 +122,5 @@ class ChromaStore:
 
         kwargs2: dict[str, Any] = {"k": k}
         if filter is not None:
-            kwargs2["filter"] = filter
+            kwargs2["filter"] = self._normalize_filter(filter)
         return self._db.as_retriever(search_kwargs=kwargs2)

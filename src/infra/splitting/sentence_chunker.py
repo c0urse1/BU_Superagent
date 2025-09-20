@@ -43,6 +43,10 @@ class SentenceAwareChunker(TextSplitterLike):
                     # cheap proxy for number of sentences
                     "num_sentences": text.count(".") + text.count("!") + text.count("?"),
                 }
+                # Ensure key metadata are retained even if not present in 'meta'
+                for k in ("source", "page", "title", "section", "category"):
+                    if k not in md and k in (meta or {}):
+                        md[k] = meta[k]
                 if source is not None:
                     md["source"] = source
                 if page is not None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from langchain.schema import Document
 
 from bu_kb.ingest.embeddings import build_embedder
@@ -26,6 +27,7 @@ class TinySplitter(Splitter):
         return out
 
 
+@pytest.mark.slow
 def test_pipeline_persists_chroma(tmp_path: Path) -> None:
     persist_dir = tmp_path / "chroma"
     try:

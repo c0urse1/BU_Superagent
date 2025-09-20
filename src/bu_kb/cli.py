@@ -111,6 +111,7 @@ def ingest(
         loader=PdfLoader(),
         splitter=TextSplitterAdapter(splitter_impl),
         store=store,
+        embedding_signature=app_cfg.embeddings.signature,
     )
 
     count = pipeline.run(pdfs)
