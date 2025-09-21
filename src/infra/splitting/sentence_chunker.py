@@ -93,8 +93,13 @@ class SentenceAwareChunker(TextSplitterLike):
             chunks.append(self.p.joiner.join(cur).strip())
         return chunks
 
-    def _merge_small_neighbors(self, docs: list[Document]) -> list[Document]:
-        """Merge adjacent tiny chunks from same source & page until stable."""
+    def _merge_small_neighbors(self, docs: list[Document], _pass: int = 0) -> list[Document]:
+        """Merge adjacent tiny chunks from same source & page.
+
+        Runs at most two passes (initial + one extra) to avoid quadratic behavior
+        on very long sequences. This matches the intention in the comment and is
+        sufficient in practice to eliminate tiny pairs.
+        """
         if not docs:
             return docs
         merged: list[Document] = []
@@ -123,7 +128,7 @@ class SentenceAwareChunker(TextSplitterLike):
                         continue
             merged.append(cur)
             i += 1
-        # If a single pass still leaves tiny pairs, run once more (idempotent in practice)
-        if len(merged) < len(docs):
-            return self._merge_small_neighbors(merged)
+        # If a pass performed merges, run at most one additional pass
+        if len(merged) < len(docs) and _pass < 1:
+            return self._merge_small_neighbors(merged, _pass=_pass + 1)
         return merged
