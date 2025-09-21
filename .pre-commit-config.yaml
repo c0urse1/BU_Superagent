@@ -26,7 +26,6 @@ repos:
         language: system
         stages: [commit]
         pass_filenames: false
-        timeout: 300
         args: ["-m", "pytest", "-q", "--maxfail=1", "--no-cov", "-m", "not slow"]
 
       # Full suite on push
@@ -36,5 +35,4 @@ repos:
         language: system
         stages: [push]
         pass_filenames: false
-        timeout: 600
         args: ["-m", "pytest", "-q", "--maxfail=1", "--no-cov"]
