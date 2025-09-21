@@ -18,6 +18,8 @@ except Exception:  # pragma: no cover
 class ChromaStore:
     def __init__(self, collection: str, persist_dir: Path, embedder: LCEmbeddings) -> None:
         persist_dir.mkdir(parents=True, exist_ok=True)
+        # Keep a direct reference for components that need to embed ad-hoc text
+        self._embedder = embedder
         self._db = Chroma(
             collection_name=collection,
             persist_directory=str(persist_dir),
@@ -53,6 +55,22 @@ class ChromaStore:
         client = getattr(self._db, "_client", None)
         if client and hasattr(client, "persist"):
             client.persist()
+
+    # Optional cross-run dedup helper (best-effort)
+    def exists_by_hash(self, content_hash: str) -> bool:  # pragma: no cover - passthrough util
+        """Check if a document with metadata.content_hash exists in the collection.
+
+        Uses the underlying chroma collection when available; returns False on errors.
+        """
+        try:
+            raw = getattr(self._db, "_collection", None)
+            if raw is None:
+                return False
+            got = raw.get(where={"content_hash": content_hash}, limit=1)
+            ids = (got or {}).get("ids") or []
+            return len(ids) > 0
+        except Exception:
+            return False
 
     # --- Query convenience APIs ---
     def query(
