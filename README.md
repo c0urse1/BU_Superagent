@@ -33,6 +33,12 @@ python -m pip install -e .[dev,nlp,openai]
 
 If you previously installed mismatched versions, re-run the command to reconcile.
 
+PowerShell chaining tip: Prefer separate lines or use `$LASTEXITCODE` checks; avoid `&&`/`||` in older PS versions. Example (create branch or switch if it exists):
+
+```powershell
+git checkout -b feat/dedup-ingest-and-query; if ($LASTEXITCODE -ne 0) { git checkout feat/dedup-ingest-and-query }
+```
+
 ## Embeddings configuration
 
 Embeddings are configurable via settings (see `src/core/settings.py`) and environment variables.

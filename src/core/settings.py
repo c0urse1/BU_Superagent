@@ -35,6 +35,22 @@ class KBSettings(BaseModel):
     persist_directory: str = ".vector_store/chroma"
 
 
+# Deduplication settings
+class DedupIngestConfig(BaseModel):
+    enabled: bool = True
+    hash_enabled: bool = True
+    semantic_enabled: bool = True  # cosine-based near-dup check (same doc)
+    min_chars_for_hash: int = 20
+    similarity_threshold: float = 0.95  # 0..1 cosine
+    keep_strategy: str = "first"  # "first" | "longest" | "authoritative"
+
+
+class DedupQueryConfig(BaseModel):
+    enabled: bool = True
+    method: str = "cosine"  # "cosine" | "exact"
+    similarity_threshold: float = 0.95
+
+
 class AppSettings(BaseModel):
     embeddings: EmbeddingConfig = EmbeddingConfig()
     kb: KBSettings = KBSettings()
@@ -50,3 +66,7 @@ class AppSettings(BaseModel):
     chunking: AppSettings.ChunkingConfig = Field(
         default_factory=lambda: AppSettings.ChunkingConfig()
     )
+
+    # New: Deduplication configuration blocks
+    dedup_ingest: DedupIngestConfig = DedupIngestConfig()
+    dedup_query: DedupQueryConfig = DedupQueryConfig()
