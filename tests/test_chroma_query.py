@@ -86,5 +86,6 @@ def test_get_retriever_returns_docs(tmp_path: Path) -> None:
     store.persist()
 
     retriever = store.get_retriever(k=2)
-    results = retriever.get_relevant_documents("Gesundheitsprüfung")
+    # Use modern Retriever API: invoke(input) instead of deprecated get_relevant_documents
+    results = retriever.invoke("Gesundheitsprüfung")
     assert results and "Gesundheitsprüfung" in results[0].page_content
