@@ -1,124 +1,151 @@
 from __future__ import annotations
 
-import time
-from dataclasses import dataclass
+import argparse
+import json
+
+# Ensure repository root on path when run directly
+import sys
 from pathlib import Path
+from typing import Any, Literal
 
-from langchain_core.documents import Document
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-from src.core.settings import AppSettings, EmbeddingConfig
-from src.infra.embeddings.factory import build_embeddings
-from src.infra.vectorstores.chroma_store import ChromaStore, collection_name_for
+from src.core.settings import EmbeddingConfig  # noqa: E402
+from src.infra.retrieval.citations import make_doc_short  # noqa: E402
+from src.infra.retrieval.retriever import retrieve  # noqa: E402
 
-# Tiny DE-centric fixture
-FIXTURE: list[Document] = [
-    Document(page_content="Definition der Berufsunfähigkeit gemäß VVG §172."),
-    Document(
-        page_content="Gesundheitsprüfung umfasst Vorerkrankungen und Behandlungen der letzten 5 Jahre."
-    ),
-    Document(page_content="Ausschlüsse: Hochrisiko-Hobbys wie Klettern im Outdoor-Bereich."),
-    Document(page_content="Leistungsprüfung: Nachweise, Stabilität, berufliche Tätigkeit."),
-]
 
-QUERIES_EXPECT: dict[str, str] = {
-    "Was zählt zur Gesundheitsprüfung?": "Gesundheitsprüfung",
-    "Was sind typische Ausschlüsse?": "Ausschlüsse",
-    "Was ist Berufsunfähigkeit?": "Berufsunfähigkeit",
+def _read_jsonl(path: str | Path) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            items.append(json.loads(line))
+    return items
+
+
+ess_aliases: dict[str, str] = {
+    "hf": "huggingface",
+    "huggingface": "huggingface",
+    "openai": "openai",
 }
 
 
-@dataclass
-class RunResult:
-    provider: str
-    model: str
-    recall_at_k: float
-    ingest_ms: int
-    avg_query_ms: int
+def _sig_to_config(sig: str) -> EmbeddingConfig:
+    parts = sig.split(":")
+    if len(parts) < 2:
+        raise ValueError(f"Invalid signature: {sig}")
+    prov_key = parts[0].strip().lower()
+    provider = ess_aliases.get(prov_key, prov_key)
+    if len(parts) == 2:
+        model_part = parts[1]
+        norm_part = "norm"
+    else:
+        model_part = ":".join(parts[1:-1])
+        norm_part = parts[-1]
+    model = model_part.strip()
+    if provider == "huggingface" and "/" not in model:
+        model = f"sentence-transformers/{model}"
+    normalize = str(norm_part).lower().startswith("norm")
+    prov_lit: Literal["huggingface", "openai", "dummy"]
+    if provider not in ("huggingface", "openai", "dummy"):
+        prov_lit = "huggingface"
+    else:
+        prov_lit = provider  # type: ignore[assignment]
+    return EmbeddingConfig(provider=prov_lit, model_name=model, normalize_embeddings=normalize)
 
 
-def _ensure_store(cfg_app: AppSettings, cfg_emb: EmbeddingConfig) -> ChromaStore:
-    emb = build_embeddings(cfg_emb)
-    collection = collection_name_for(cfg_app.kb.collection_base, cfg_emb.signature)
-    # Use positional args to match the repo's ChromaStore signature
-    store = ChromaStore(collection, Path(cfg_app.kb.persist_directory), emb)
-    return store
+def hit_gold(candidate: dict[str, Any], gold: list[dict[str, Any]]) -> bool:
+    md = candidate.get("metadata", {}) or {}
+    cand = {
+        "doc": make_doc_short(md.get("source", "Unknown")),
+        "page": int(md.get("page", 0) or 0),
+        "section": (md.get("section") or "").strip(),
+    }
+    for g in gold:
+        if (
+            cand["doc"] == g["doc"]
+            and cand["page"] == int(g["page"])
+            and str(cand.get("section") or "").lower()
+            == str(g.get("section") or "").strip().lower()
+        ):
+            return True
+    return False
 
 
-def ingest(store: ChromaStore, signature: str) -> int:
-    # tag signature to allow filtered retrieval
-    docs: list[Document] = []
-    for d in FIXTURE:
-        d.metadata = {
-            **(d.metadata or {}),
-            "embedding_sig": signature,
-            "source": "fixture",
-            "page": 1,
-        }
-        docs.append(d)
-    t0 = time.perf_counter()
-    store.add_documents(docs)
-    return int((time.perf_counter() - t0) * 1000)
+def recall_at_k(ranked: list[dict[str, Any]], gold: list[dict[str, Any]], k: int) -> float:
+    topk = ranked[:k]
+    return 1.0 if any(hit_gold(r, gold) for r in topk) else 0.0
 
 
-def eval_model(cfg_app: AppSettings, cfg_emb: EmbeddingConfig, k: int = 3) -> RunResult:
-    store = _ensure_store(cfg_app, cfg_emb)
-    ingest_ms = ingest(store, cfg_emb.signature)
+def mrr_at_k(ranked: list[dict[str, Any]], gold: list[dict[str, Any]], k: int) -> float:
+    for i, r in enumerate(ranked[:k], start=1):
+        if hit_gold(r, gold):
+            return 1.0 / i
+    return 0.0
 
-    # queries
-    t_total = 0.0
-    hits = 0
-    total = 0
-    for q, expect_sub in QUERIES_EXPECT.items():
-        t0 = time.perf_counter()
-        docs = store.query(q, k=k, filter={"embedding_sig": cfg_emb.signature})
-        t_total += time.perf_counter() - t0
-        total += 1
-        joined = " ".join(d.page_content for d in docs)
-        if expect_sub.lower() in joined.lower():
-            hits += 1
 
-    return RunResult(
-        provider=cfg_emb.provider,
-        model=cfg_emb.model_name,
-        recall_at_k=hits / max(total, 1),
-        ingest_ms=ingest_ms,
-        avg_query_ms=int((t_total / max(total, 1)) * 1000),
-    )
+def eval_model(
+    sig: str, gold_path: str, k_values: tuple[int, ...] = (3, 5, 10)
+) -> dict[str, float]:
+    recalls: dict[int, list[float]] = {k: [] for k in k_values}
+    mrrs: dict[int, list[float]] = {k: [] for k in k_values}
+
+    rows = _read_jsonl(gold_path)
+    emb_cfg = _sig_to_config(sig)
+
+    for row in rows:
+        q = row["question"]
+        gold = row["gold"]
+        # retrieve must choose the correct collection/embedding under the hood.
+        ranked = retrieve(q, k=max(k_values), embeddings=emb_cfg)
+
+        for k in k_values:
+            recalls[k].append(recall_at_k(ranked, gold, k))
+            mrrs[k].append(mrr_at_k(ranked, gold, k))
+
+    out: dict[str, float] = {}
+    for k in k_values:
+        out[f"recall@{k}"] = sum(recalls[k]) / max(1, len(recalls[k]))
+        out[f"mrr@{k}"] = sum(mrrs[k]) / max(1, len(mrrs[k]))
+    return out
 
 
 def main() -> None:
-    base = AppSettings()
+    ap = argparse.ArgumentParser(description="Evaluate embeddings against gold JSONL (Recall/MRR)")
+    ap.add_argument("--gold", default="data/gold/gold_qa.jsonl")
+    ap.add_argument("--sig-mpnet", default="hf:paraphrase-multilingual-mpnet-base-v2:norm")
+    ap.add_argument("--sig-minilm", default="hf:all-MiniLM-L6-v2:norm")
+    ap.add_argument("--k", type=int, default=5)
+    args = ap.parse_args()
 
-    # A) baseline (MiniLM)
-    a = EmbeddingConfig(
-        provider="huggingface",
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
-    )
-    # B) multilingual (mpnet)
-    b = EmbeddingConfig(
-        provider="huggingface",
-        model_name="sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
-    )
-    # C) optional OpenAI (only runs if key present)
-    c = EmbeddingConfig(
-        provider="openai",
-        model_name="text-embedding-3-small",
-        openai_api_key=base.embeddings.openai_api_key,
-        openai_base_url=base.embeddings.openai_base_url,
-    )
+    mpnet = eval_model(args.sig_mpnet, args.gold, k_values=(3, 5, 10))
+    minilm = eval_model(args.sig_minilm, args.gold, k_values=(3, 5, 10))
 
-    results: list[RunResult] = []
-    for cfg in (a, b):
-        results.append(eval_model(base, cfg))
-    if c.openai_api_key:
-        results.append(eval_model(base, c))
+    print("\n=== RESULTS ===")
+    print("mpnet :", mpnet)
+    print("MiniLM:", minilm)
 
-    print("\n=== Embedding A/B Results ===")
-    for r in results:
-        print(
-            f"{r.provider:<10} | {r.model:<55} | R@3={r.recall_at_k:.2f} | "
-            f"ingest={r.ingest_ms} ms | q_avg={r.avg_query_ms} ms"
-        )
+    # Acceptance gate: mpnet recall@5 >= 0.85
+    if mpnet.get("recall@5", 0.0) < 0.85:
+        print("\n[WARN] mpnet recall@5 below 0.85 — consider improving embeddings/data.")
+    else:
+        print("\n[OK] mpnet recall@5 meets >= 0.85")
+
+    # Optional: Markdown snippet for quick sharing
+    def md_table(results: dict, label: str) -> str:
+        cols = ["recall@3", "recall@5", "recall@10", "mrr@3", "mrr@5", "mrr@10"]
+        row = " | ".join(f"{results.get(c, 0):.3f}" for c in cols)
+        sep = "|".join(["---"] * len(cols))
+        return f"### {label}\n\n| {' | '.join(cols)} |\n|{sep}|\n| {row} |\n"
+
+    print("\n--- Markdown Summary ---\n")
+    print(md_table(mpnet, "mpnet"))
+    print(md_table(minilm, "MiniLM"))
 
 
 if __name__ == "__main__":

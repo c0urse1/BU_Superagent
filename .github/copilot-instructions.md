@@ -1,36 +1,27 @@
 # Copilot instructions for BU_Superagent
 
-Purpose: Help agents ingest PDFs into Chroma and run read‑only similarity queries fast. Two paths exist: a simple `bu_kb` CLI and a configurable infra/core layer—compose the provided helpers, don’t reinvent wiring.
+Purpose: Make agents productive on PDF → Chroma ingestion and read‑only retrieval. Two paths exist: a simple CLI (`src/bu_kb/cli.py`) and a configurable infra/core layer—compose helpers, don’t re‑wire basics.
 
-## Architecture (what lives where)
-- CLI `src/bu_kb/cli.py`
-  - Ingest: `PdfLoader → TextSplitterAdapter (sentence‑aware by default) → bu_kb.ingest.store.ChromaStore`; embeddings via infra `build_embeddings(AppSettings().embeddings)`. Each chunk gets `metadata["embedding_sig"]`; ingest de‑dup does hash + optional cosine per `AppSettings().dedup_ingest`.
-  - Query: `src/bu_kb/query.py::QueryService` with MMR (`--mmr`, `--fetch-k`), optional score threshold, min‑max score normalization, JSON/outfile modes. Retrieval‑time de‑dup (`cosine|exact`) via `AppSettings().dedup_query`. Uses `src/bu_kb/vectorstore.py` for a read‑only Chroma load (version‑tolerant `_import_chroma`).
+## Architecture at a glance
+- CLI ingest: `PdfLoader → TextSplitterAdapter (sentence‑aware) → bu_kb.ingest.store.ChromaStore`; embeddings from infra `build_embeddings(AppSettings().embeddings)`. Each chunk gets `metadata["embedding_sig"]`; ingest de‑dup = hash + optional cosine (`AppSettings().dedup_ingest`).
+- CLI query: `src/bu_kb/query.py::QueryService` supports MMR (`--mmr`, `--fetch-k`), score thresholding, optional min‑max score normalization, JSON/outfile. Retrieval‑time de‑dup (`cosine|exact`) via `AppSettings().dedup_query`. Vectorstore loads read‑only via `src/bu_kb/vectorstore.py` using tolerant `_import_chroma`.
 - CLI config `src/bu_kb/config.py`: env‑backed (prefix `KB_`), defaults: `data/pdfs`, `.vector_store/chroma`, `bu_knowledge`, model `sentence-transformers/all-MiniLM-L6-v2`, `chunk_size=1000`, `chunk_overlap=150`.
-- Infra/Core
-  - Settings `src/core/settings.py`: `EmbeddingConfig` (provider `huggingface|openai|dummy`, device auto/CPU/CUDA/MPS, normalize, batch) and `AppSettings` (KB paths, chunking knobs, ingest/query de‑dup, section context).
-  - Embeddings `src/infra/embeddings/factory.py::build_embeddings()`: tolerant imports across `langchain_*`, OpenAI optional, device via `infra/embeddings/device.resolve_device`.
-  - Vector store `src/infra/vectorstores/chroma_store.py`: `ChromaStore` wrapper and `collection_name_for(base, signature)` to namespace per embedding signature.
-  - PDF loader `src/infra/loaders/pdf_smart_loader.py`: enriches `metadata` (`source`, 1‑based `page`, `title`, `section` via TOC, `category` from path).
-  - Splitters `src/infra/splitting/factory.py`: `SentenceAwareChunker` (default; optional `syntok`) or `RecursiveCharacterTextSplitter` with chunking knobs.
+- Infra/Core: settings in `src/core/settings.py` (providers `huggingface|openai|dummy`, device auto/CPU/CUDA/MPS); embeddings factory `src/infra/embeddings/factory.py` (device via `resolve_device`); vector store + namespacing `src/infra/vectorstores/chroma_store.py::collection_name_for(base, signature)`; PDF metadata `src/infra/loaders/pdf_smart_loader.py` (adds `source/page/title/section/category`).
 
-## Workflows (Windows cmd examples)
-- Install deps: use VS Code task “Install deps (pip)” or run `python -m pip install -e .[dev,nlp,openai]`.
-- Ingest (sentence‑aware by default):
-  - `python -m bu_kb.cli ingest --source data\pdfs --persist .vector_store\chroma --collection bu_knowledge [--model ... --device ... --batch-size ... --chunk-size 1000 --chunk-overlap 150]`
-- Query (CLI):
-  - `python -m bu_kb.cli query "Welche Gesundheitsfragen sind relevant?" -k 5 --mmr --json --outfile results.json --normalize-scores`
-- Query (infra/core) with namespacing and filters: `python scripts\query_kb.py "frage" -k 5 [--category X --section Y --provider huggingface --model ... --device ...]`.
-  - Use `collection_name_for(app.kb.collection_base, emb_cfg.signature)` and filter `{"embedding_sig": emb_cfg.signature}` to avoid cross‑model bleed.
-- Utilities: peek chunks `python tools\peek_chunks.py`; eval models `python scripts\eval_embeddings.py`; tests `pytest -q` (uses `dummy` embeddings; checks namespacing/dedup).
+## Dev workflows (cmd.exe examples)
+- Install deps (VS Code task preferred): python -m pip install -e .[dev,nlp,openai]
+- Ingest: python -m bu_kb.cli ingest --source data\pdfs --persist .vector_store\chroma --collection bu_knowledge [--model ... --device ... --batch-size ... --chunk-size 1000 --chunk-overlap 150]
+- Query (CLI): python -m bu_kb.cli query "Welche Gesundheitsfragen sind relevant?" -k 5 --mmr --json --outfile results.json --normalize-scores
+- Query (infra/core) with namespacing: python scripts\query_kb.py "frage" -k 5 [--category X --section Y --provider huggingface --model ... --device ...]
+  - Use: `collection_name_for(app.kb.collection_base, emb_cfg.signature)` and filter `{"embedding_sig": emb_cfg.signature}` to avoid cross‑model bleed.
+- Tests (offline; dummy embeddings): pytest -q
 
-## Conventions and gotchas (project‑specific)
-- Always propagate metadata: at least `source`; loader adds `page/title/section/category`. Ingest stamps `embedding_sig`; hash de‑dup sets `metadata.content_hash` and `is_duplicate`.
-- Namespacing: if you ingest multiple models, prefer infra path and `collection_name_for(...)` + query filter `embedding_sig`. Chroma filenames are capped (function truncates to 63 chars).
-- Read‑only query path: do not call `persist()` or `add_documents()` in query flows. Use `vectorstore._import_chroma()` for tolerant loads.
-- Chunking defaults: sentence‑aware (`chunk_size=1000`, `chunk_overlap=150`, `chunk_max_overflow`, `chunk_min_merge_char_len`). Section context can inject TOC section into first chunk; see `AppSettings.section_context`.
-- Chroma filter shape: multi‑field dicts become `$and` in `bu_kb.ingest.store.ChromaStore` to match newer Chroma expectations.
-- Version compatibility: rely on provided factories/wrappers instead of raw constructors (`langchain_*`/`chromadb` have breaking changes).
-- PowerShell tip: older PS may not support `&&/||`. Use `$LASTEXITCODE` (see README example) when chaining.
+## Conventions and project‑specific rules
+- Always propagate metadata. Loader adds `source` (abs path), `page` (1‑based), `title`, `section` (TOC), and `category` (folder). Ingest stamps `embedding_sig`; de‑dup sets `metadata.content_hash` and `is_duplicate`.
+- Namespacing for multi‑model corpora: prefer infra path + `collection_name_for(...)` and query filter `embedding_sig`. Chroma filenames are capped; helper truncates to 63 chars.
+- Read‑only query flows: never call `persist()` or `add_documents()`; use `src/bu_kb/vectorstore.py` to load existing collections.
+- Chunking defaults (sentence‑aware): size 1000, overlap 150, soft overflow, merge tiny neighbors. Section context flags in `AppSettings.section_context` control TOC/title injection and cross‑page merge.
+- Chroma filter shape: when passing multiple metadata fields, use a dict that becomes `$and` via `bu_kb.ingest.store.ChromaStore._normalize_filter`.
+- Version‑tolerance: use provided factories/wrappers (`langchain_*` and `chromadb` have breaking changes). See README for pinned versions and model A/B evaluation.
 
-See `README.md` for pinned versions and a quick A/B model evaluation flow.
+Tip (PowerShell): avoid `&&/||` on older PS; use `$LASTEXITCODE` as shown in README. For device/batch overrides, prefer environment or `AppSettings().embeddings`.

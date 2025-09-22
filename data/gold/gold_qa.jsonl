@@ -1,0 +1,2 @@
+{"id":"Q1","question":"When does exclusion X apply?","gold":[{"doc":"BU Manual","page":34,"section":"Exclusions"}]}
+{"id":"Q2","question":"What is the waiting period for Y?","gold":[{"doc":"BU Manual","page":12,"section":"Basics"},{"doc":"Superagent Spec","page":9,"section":"Rules"}]}
