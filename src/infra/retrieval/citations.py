@@ -31,7 +31,10 @@ def make_doc_short(source: str) -> str:
     base = os.path.basename(source or "").strip()
     # drop version suffixes like _v2 and .pdf
     base = re.sub(r"(_v\d+|\.pdf)$", "", base, flags=re.IGNORECASE)
-    base = base.replace("_", " ").replace("-", " ").strip()
+    # Normalize separators to spaces (treat '+', '_', '-' alike)
+    base = base.replace("_", " ").replace("-", " ").replace("+", " ").strip()
+    # Collapse multiple spaces
+    base = re.sub(r"\s+", " ", base)
     # Project-specific mapping if needed
     mapping = {
         "BU Handbuch": "BU Manual",

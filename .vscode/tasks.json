@@ -9,6 +9,14 @@
 			"args": [],
 			"problemMatcher": [],
 			"group": "build"
+		},
+		{
+			"label": "Install deps (pip)",
+			"type": "shell",
+			"command": "C:/BU_SUPERAGENT/.venv/Scripts/python.exe -m pip install -e .[dev,nlp,openai]",
+			"args": [],
+			"isBackground": false,
+			"group": "build"
 		}
 	]
 }

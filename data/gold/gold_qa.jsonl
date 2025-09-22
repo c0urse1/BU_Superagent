@@ -1,2 +1,122 @@
-{"id":"Q1","question":"When does exclusion X apply?","gold":[{"doc":"BU Manual","page":34,"section":"Exclusions"}]}
-{"id":"Q2","question":"What is the waiting period for Y?","gold":[{"doc":"BU Manual","page":12,"section":"Basics"},{"doc":"Superagent Spec","page":9,"section":"Rules"}]}
+[
+  {
+    "query": "Welche Annahmeentscheidungen sind bei der BU-Risikoprüfung möglich?",
+    "gold_passage": "In einigen Fällen kann es jedoch zu Erschwerungen kommen. Diese sind:\n• Prämienzuschlag\n• Ausschlussklausel (mit und ohne Nachschaumöglichkeit)\n• Rückstellung des Antrags\n• Ablehnung",
+    "source_document": "infoblatt-leitfaden-risikopruefung-Alte-Leipziger.pdf",
+    "page": 5
+  },
+  {
+    "query": "Wie definiert sich Berufsunfähigkeit in den Versicherungsbedingungen?",
+    "gold_passage": "(2) Berufsunfähigkeit liegt vor, wenn Art, Schwere und Ausmaß einer Krankheit, einer Körperverletzung oder eines Kräfteverfalls, die ärztlich nachzuweisen sind, nach allgemein anerkannten medizinischen Erkenntnissen erwarten lassen, dass die versicherte Person ununterbrochen wenigstens sechs Monate mindestens zu 50 % außer Stande sein wird, ihren zuletzt bei Eintritt der Berufsunfähigkeit ausgeübten Beruf, so wie er ohne gesundheitliche Beeinträchtigung ausgestaltet war, nachzugehen.",
+    "source_document": "EGOTOP Bedingungen.pdf",
+    "page": 2
+  },
+  {
+    "query": "Können riskante Hobbys oder Sportarten zu einer Ablehnung meines BU-Antrags führen?",
+    "gold_passage": "Je nach Sportart und deren Ausprägung kann es zu unterschiedlichen Zuschlägen bis hin zu einer Ablehnung kommen.",
+    "source_document": "infoblatt-leitfaden-risikopruefung-Alte-Leipziger.pdf",
+    "page": 30
+  },
+  {
+    "query": "In welchen Fällen ist der Versicherungsschutz in der BU-Versicherung ausgeschlossen?",
+    "gold_passage": "Wir leisten nicht, wenn der Versicherungsfall eingetreten ist:\na. Durch Unruhen,\n• die aus der Bevölkerung heraus entstanden sind (innere Unruhen), und\n• an denen die versicherte Person auf Seiten der Unruhestiftenden teilgenommen hat.\nb. Weil die versicherte Person außerhalb der Bundesrepublik Deutschland aktiv an kriegerischen Ereignissen beteiligt war.",
+    "source_document": "Baloise BU.pdf",
+    "page": 16
+  },
+  {
+    "query": "Was ist die elektronische Risikoprüfung \"e-Votum\" der Alten Leipziger?",
+    "gold_passage": "Mit \"e-Votum\" sparen Sie Zeit und erhalten jederzeit ein verbindliches Votum! Führen Sie in wenigen Schritten ein Interview mit Ihrem Kunden und erhalten Sie sofort das entsprechende Ergebnis.",
+    "source_document": "infoblatt-leitfaden-risikopruefung-Alte-Leipziger.pdf",
+    "page": 15
+  },
+  {
+    "query": "Wie hoch darf die BU-Rente maximal sein, wenn die versicherte Person kein eigenes Einkommen hat?",
+    "gold_passage": "Finanzielle Angemessenheit sehen wir bis zu einer BU-Rente von monatlich 1.500 € als gegeben an. Eine höhere Rente ist nicht möglich.",
+    "source_document": "infoblatt-leitfaden-risikopruefung-Alte-Leipziger.pdf",
+    "page": 13
+  },
+  {
+    "query": "Warum wird ein BU-Antrag zurückgestellt?",
+    "gold_passage": "Eine Rückstellung kann erfolgen, wenn aufgrund Art oder Schwere der Erkrankung oder bei risikoreichen aktuell laufenden bzw. gerade abgeschlossenen Behandlungen die Prognose noch nicht hinreichend sicher abschätzbar ist.",
+    "source_document": "infoblatt-leitfaden-risikopruefung-Alte-Leipziger.pdf",
+    "page": 20
+  },
+  {
+    "query": "Wann liegt Berufsunfähigkeit infolge Pflegebedürftigkeit vor?",
+    "gold_passage": "Berufsunfähigkeit im Sinne dieser Bedingungen ist auch die Berufsunfähigkeit infolge Pflegebedürftigkeit.\nPflegebedürftigkeit im Sinne dieser Bedingungen liegt vor bei\n• Pflegebedürftigkeit nach Art und Umfang der Beeinträchtigung der Alltagskompetenz (sogenannter ADL-Score);\n• Pflegebedürftigkeit im Sinne des SGB;\n• Autonomieverlust wegen Demenz.",
+    "source_document": "Allgemeine Bedingungen_BU.pdf",
+    "page": 6
+  },
+  {
+    "query": "Was ist eine Umorganisationshilfe in der BU-Versicherung?",
+    "gold_passage": "Ist die Umorganisation zumutbar und liegt nur deshalb keine bedingungsgemäße Berufsunfähigkeit vor, beteiligen wir uns an den Kosten der Umorganisation: Wir zahlen Ihnen in diesem Fall eine Umorganisationshilfe in Höhe von 6 monatlichen Berufsunfähigkeitsrenten als einmalige Kapitalleistung, maximal 15.000,00 EUR.",
+    "source_document": "Allgemeine Bedingungen_BU.pdf",
+    "page": 4
+  },
+  {
+    "query": "Unter welchen Voraussetzungen zahlt der Versicherer eine Rehabilitationshilfe und wie hoch ist sie?",
+    "gold_passage": "Wurde die versicherte Person berufsunfähig oder berufsunfähig infolge Pflegebedürftigkeit und hat sie deswegen freiwillig einen oder mehrere Rehabilitations-Dienst(e) auf eigene Kosten in Anspruch genommen, zahlen wir eine Rehabilitationshilfe von bis zu maximal 1.000,00 EUR.",
+    "source_document": "Allgemeine Bedingungen_BU.pdf",
+    "page": 2
+  },
+  {
+    "query": "Was ist ein \"Startzuschuss\" in der BU-Versicherung und wann wird er gezahlt?",
+    "gold_passage": "Der Startzuschuss beträgt sechs zuletzt gezahlte monatliche Berufsunfähigkeits-Renten, höchstens 10.000 EUR. Wir zahlen den Startzuschuss zu Beginn des Monats, in dem wir keine Leistungen mehr erbringen.",
+    "source_document": "Baloise BU.pdf",
+    "page": 6
+  },
+  {
+    "query": "Unter welchen Bedingungen bietet die Alte Leipziger eine vereinfachte BU-Risikoprüfung an?",
+    "gold_passage": "• Nur Beitragsbefreiung, keine BU-Rente\n• Monatlicher Beitrag max. 250 €\n• Eintrittsalter max. 50 Jahre\n• Dynamik nach Modus P sowie beitragsfreie Dynamik max. 5 %\n• Keine Ausbau- und Nachversicherungsgarantie",
+    "source_document": "infoblatt-leitfaden-risikopruefung-Alte-Leipziger.pdf",
+    "page": 16
+  },
+  {
+    "query": "Welche Leistung bietet der optionale Arbeitsunfähigkeitsschutz in einer BU-Versicherung?",
+    "gold_passage": "Wenn Sie den Arbeitsunfähigkeitsschutz beantragt haben: Eine Rente in Höhe der Berufsunfähigkeits-Rente, solange die versicherte Person arbeitsunfähig ist, längstens für 36 Monate.",
+    "source_document": "Baloise BU.pdf",
+    "page": 3
+  },
+  {
+    "query": "Muss ich Beiträge weiterzahlen, während über meinen BU-Leistungsantrag entschieden wird?",
+    "gold_passage": "Bis entschieden wurde, ob wir leisten, müssen Sie die Beiträge in voller Höhe weiterzahlen. Wenn wir leisten, erhalten Sie die über den Leistungsbeginn hinaus gezahlten Beiträge zurück. Wir werden Ihnen die noch zu zahlenden Beiträge bis zur Entscheidung über unsere Leistungspflicht stunden, wenn Sie dies in Textform beantragen. Für diese Stundung erheben wir keine Zinsen.",
+    "source_document": "EGOTOP Bedingungen.pdf",
+    "page": 1
+  },
+  {
+    "query": "Was bedeutet die vorvertragliche Anzeigepflicht im BU-Antrag?",
+    "gold_passage": "Alle Fragen im Antrag, die wir Ihnen in Textform stellen, müssen Sie vollständig und wahrheitsgemäß beantworten. Dies nennen wir Ihre vorvertragliche Anzeigepflicht.",
+    "source_document": "Baloise BU.pdf",
+    "page": 3
+  },
+  {
+    "query": "Was bedeutet es, wenn im BU-Vertrag eine Karenzzeit vereinbart ist?",
+    "gold_passage": "Eine Karenzzeit ist ein vereinbarter Zeitraum von dem Tag an, an dem die Berufsunfähigkeit eingetreten ist, bis zum Beginn der Leistungen. Tritt nach einer beendeten Berufsunfähigkeit erneut eine Berufsunfähigkeit aufgrund derselben medizinischen Ursache ein, rechnen wir bereits zurückgelegte Karenzzeiten an.",
+    "source_document": "EGOTOP Bedingungen.pdf",
+    "page": 1
+  },
+  {
+    "query": "Verzichtet der Versicherer auf eine abstrakte Verweisung?",
+    "gold_passage": "Wir verzichten auf eine abstrakte Verweisung, das heißt wir prüfen nicht, ob die versicherte Person noch irgendeine andere Tätigkeit ausüben könnte.",
+    "source_document": "Allgemeine Bedingungen_BU.pdf",
+    "page": 4
+  },
+  {
+    "query": "Muss ein Selbstständiger im BU-Fall eine zumutbare Umorganisation seines Betriebs durchführen?",
+    "gold_passage": "Ist die versicherte Person selbstständig, setzt Berufsunfähigkeit voraus, dass die versicherte Person außerstande ist\n- durch zumutbare Umorganisation ihres Arbeitsplatzes oder ihres Tätigkeitsbereichs\n- oder durch Zuweisung betrieblich anfallender Arbeitsabläufe an Mitarbeiter\nein Tätigkeitsfeld zu schaffen, das Berufsunfähigkeit nach Absatz 2 ausschließt.",
+    "source_document": "EGOTOP Bedingungen.pdf",
+    "page": 3
+  },
+  {
+    "query": "Was leistet der optionale Pflegeschutz in der BU-Versicherung?",
+    "gold_passage": "Eine lebenslange Berufsunfähigkeits-Rente, wenn die versicherte Person zum Ende der Leistungsdauer eine Berufsunfähigkeits-Rente erhält und außerdem pflegebedürftig ist.",
+    "source_document": "Baloise BU.pdf",
+    "page": 3
+  },
+  {
+    "query": "Besteht Versicherungsschutz in der BU auch im Ausland?",
+    "gold_passage": "Der Versicherungsschutz besteht weltweit.",
+    "source_document": "Baloise BU.pdf",
+    "page": 5
+  }
+]

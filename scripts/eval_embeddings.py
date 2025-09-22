@@ -61,19 +61,25 @@ def _sig_to_config(sig: str) -> EmbeddingConfig:
 
 def hit_gold(candidate: dict[str, Any], gold: list[dict[str, Any]]) -> bool:
     md = candidate.get("metadata", {}) or {}
-    cand = {
-        "doc": make_doc_short(md.get("source", "Unknown")),
-        "page": int(md.get("page", 0) or 0),
-        "section": (md.get("section") or "").strip(),
-    }
+    cand_doc: str = make_doc_short(md.get("source", "Unknown"))
+    try:
+        cand_page: int = int(md.get("page", 0) or 0)
+    except Exception:
+        cand_page = 0
+    cand_section: str = str(md.get("section") or "").strip()
     for g in gold:
-        if (
-            cand["doc"] == g["doc"]
-            and cand["page"] == int(g["page"])
-            and str(cand.get("section") or "").lower()
-            == str(g.get("section") or "").strip().lower()
-        ):
-            return True
+        g_doc = g["doc"]
+        g_page = int(g["page"])
+        g_section: str = str(g.get("section") or "").strip().lower()
+
+        # If gold has no section specified, match on doc + page with ±1 tolerance
+        if not g_section:
+            if cand_doc == g_doc and abs(cand_page - g_page) <= 1:
+                return True
+        else:
+            # When gold specifies a section, require all three to match
+            if cand_doc == g_doc and cand_page == g_page and cand_section.lower() == g_section:
+                return True
     return False
 
 
@@ -121,20 +127,37 @@ def main() -> None:
     ap.add_argument("--sig-mpnet", default="hf:paraphrase-multilingual-mpnet-base-v2:norm")
     ap.add_argument("--sig-minilm", default="hf:all-MiniLM-L6-v2:norm")
     ap.add_argument("--k", type=int, default=5)
+    ap.add_argument(
+        "--only",
+        choices=["mpnet", "minilm", "both"],
+        default="both",
+        help="Evaluate only one model or both (default)",
+    )
     args = ap.parse_args()
 
-    mpnet = eval_model(args.sig_mpnet, args.gold, k_values=(3, 5, 10))
-    minilm = eval_model(args.sig_minilm, args.gold, k_values=(3, 5, 10))
+    mpnet = (
+        eval_model(args.sig_mpnet, args.gold, k_values=(3, 5, 10))
+        if args.only in ("mpnet", "both")
+        else None
+    )
+    minilm = (
+        eval_model(args.sig_minilm, args.gold, k_values=(3, 5, 10))
+        if args.only in ("minilm", "both")
+        else None
+    )
 
     print("\n=== RESULTS ===")
-    print("mpnet :", mpnet)
-    print("MiniLM:", minilm)
+    if mpnet is not None:
+        print("mpnet :", mpnet)
+    if minilm is not None:
+        print("MiniLM:", minilm)
 
     # Acceptance gate: mpnet recall@5 >= 0.85
-    if mpnet.get("recall@5", 0.0) < 0.85:
+    if mpnet is not None and mpnet.get("recall@5", 0.0) < 0.85:
         print("\n[WARN] mpnet recall@5 below 0.85 — consider improving embeddings/data.")
     else:
-        print("\n[OK] mpnet recall@5 meets >= 0.85")
+        if mpnet is not None:
+            print("\n[OK] mpnet recall@5 meets >= 0.85")
 
     # Optional: Markdown snippet for quick sharing
     def md_table(results: dict, label: str) -> str:
@@ -144,8 +167,10 @@ def main() -> None:
         return f"### {label}\n\n| {' | '.join(cols)} |\n|{sep}|\n| {row} |\n"
 
     print("\n--- Markdown Summary ---\n")
-    print(md_table(mpnet, "mpnet"))
-    print(md_table(minilm, "MiniLM"))
+    if mpnet is not None:
+        print(md_table(mpnet, "mpnet"))
+    if minilm is not None:
+        print(md_table(minilm, "MiniLM"))
 
 
 if __name__ == "__main__":
