@@ -9,6 +9,15 @@ __pycache__/
 .cache/
 .mypy_cache/
 .pytest_cache/
-data/**/*.pdf
+sitecustomize.py
+results*.json
+dist/
+build/
+htmlcov/
+coverage.xml
+.coverage*
+*.log
 data/**/.gitkeep
+# Keep PDFs out of git by default (dataset is local-only)
+data/**/*.pdf
 *.pdf
