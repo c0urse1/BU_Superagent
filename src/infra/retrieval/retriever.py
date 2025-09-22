@@ -5,7 +5,13 @@ from typing import Any
 
 from src.core.settings import AppSettings, EmbeddingConfig
 from src.infra.embeddings.factory import build_embeddings
-from src.infra.vectorstores.chroma_store import ChromaStore, collection_name_for
+from src.infra.loaders.pdf_smart_loader import load_pdf_with_metadata
+from src.infra.splitting.factory import build_splitter
+from src.infra.vectorstores.chroma_store import (
+    ChromaStore,
+    collection_name_for,
+    get_collection_for_sig,
+)
 
 
 def normalize_metadata(md: dict) -> dict:
@@ -48,6 +54,7 @@ def retrieve(
     category: str | None = None,
     section: str | None = None,
     embeddings: EmbeddingConfig | None = None,
+    embedding_sig: str | None = None,
 ) -> list[dict]:
     """Retrieve chunks as dicts with text + normalized metadata, ready for prompting.
 
@@ -56,10 +63,16 @@ def retrieve(
     app = AppSettings()
     emb_cfg = embeddings or app.embeddings
     emb = build_embeddings(emb_cfg)
-    collection = collection_name_for(app.kb.collection_base, emb_cfg.signature)
+    # Route to collection by explicit signature if provided, else by emb_cfg.signature
+    if embedding_sig:
+        collection = get_collection_for_sig(embedding_sig)
+        md_sig = embedding_sig
+    else:
+        collection = collection_name_for(app.kb.collection_base, emb_cfg.signature)
+        md_sig = emb_cfg.signature
     store = ChromaStore(collection, Path(app.kb.persist_directory), emb)
 
-    md_filter: dict[str, Any] = {"embedding_sig": emb_cfg.signature}
+    md_filter: dict[str, Any] = {"embedding_sig": md_sig}
     if category:
         md_filter["category"] = category
     if section:
@@ -75,3 +88,33 @@ def retrieve(
             }
         )
     return chunks
+
+
+def load_pdf_and_chunk(path: str | Path) -> list[dict]:
+    """Load a PDF and produce sentence-aware chunks as dicts.
+
+    Returns a list like: [{"text": str, "metadata": {...}}, ...]
+    Uses AppSettings().chunking to configure the sentence-aware chunker.
+    """
+    # Normalize path and load per-page base docs with enriched metadata
+    p = Path(path)
+    docs = load_pdf_with_metadata(p)
+
+    # Build splitter from core settings (sentence-aware defaults)
+    app = AppSettings()
+    splitter = build_splitter(
+        mode=getattr(app.chunking, "mode", "sentence_aware"),
+        chunk_size=int(getattr(app.chunking, "chunk_size", 1000)),
+        chunk_overlap=int(getattr(app.chunking, "chunk_overlap", 150)),
+        max_overflow=int(getattr(app.chunking, "chunk_max_overflow", 200)),
+        min_merge_char_len=int(getattr(app.chunking, "chunk_min_merge_char_len", 500)),
+    )
+
+    out_docs = splitter.split_documents(docs)
+    return [
+        {
+            "text": (getattr(d, "page_content", "") or ""),
+            "metadata": (getattr(d, "metadata", {}) or {}),
+        }
+        for d in out_docs
+    ]

@@ -79,3 +79,13 @@ def build_embeddings(cfg: EmbeddingConfig) -> Embeddings:
         return DummyEmbeddings()
 
     raise ValueError(f"Unsupported embeddings provider: {cfg.provider}")
+
+
+def build_embeddings_with_signature(cfg: EmbeddingConfig) -> tuple[Embeddings, str]:
+    """Return an embeddings encoder together with its stable signature.
+
+    The signature is used to namespace collections and as a metadata filter
+    (metadata["embedding_sig"]) to avoid cross-model bleed.
+    """
+    emb = build_embeddings(cfg)
+    return emb, cfg.signature

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -295,3 +296,62 @@ class SentenceAwareChunker(TextSplitterLike):
             out.append(d)
 
         return out
+
+
+# --- Light, non-intrusive instrumentation helpers ---
+
+SENTENCE_END_RE = re.compile(r"[.!?…]\s*$", re.UNICODE)
+
+
+@dataclass
+class ChunkDiagnostics:
+    total_chunks: int
+    sentence_boundary_ends: int
+    percent_sentence_boundary: float
+    orphan_minis: int
+    section_injected_counts: dict[str, int]
+    title_merged_count: int
+
+
+def ends_on_sentence_boundary(text: str) -> bool:
+    """Heuristic check whether a chunk ends on a sentence boundary.
+
+    Strips trailing whitespace/footnotes-like content and matches basic punctuation.
+    """
+    return bool(SENTENCE_END_RE.search((text or "").strip()))
+
+
+def compute_chunk_diagnostics(chunks: list[dict[str, Any]]) -> ChunkDiagnostics:
+    """Compute light diagnostics over a list of chunk dicts.
+
+    Expected chunk shape: {"text": str, "metadata": dict}
+    Uses existing metadata fields when available and does not mutate inputs.
+    """
+    total = len(chunks)
+    sent_end = sum(1 for c in chunks if ends_on_sentence_boundary(c.get("text", "")))
+    orphan_minis = sum(
+        1
+        for c in chunks
+        if (c.get("metadata", {}) or {}).get("num_sentences", 0) == 0
+        or len((c.get("text", "") or "").strip()) < 60  # align with title-only heuristic
+    )
+
+    # Count section_injected per (source, section)
+    sec_counts: dict[str, int] = {}
+    for c in chunks:
+        md = c.get("metadata", {}) or {}
+        key = f"{md.get('source', '')}|{md.get('section', '')}"
+        if md.get("section_injected"):
+            sec_counts[key] = sec_counts.get(key, 0) + 1
+
+    title_merged = sum(1 for c in chunks if (c.get("metadata", {}) or {}).get("title_merged"))
+
+    pct = (sent_end / max(1, total)) * 100.0
+    return ChunkDiagnostics(
+        total_chunks=total,
+        sentence_boundary_ends=sent_end,
+        percent_sentence_boundary=pct,
+        orphan_minis=orphan_minis,
+        section_injected_counts=sec_counts,
+        title_merged_count=title_merged,
+    )
