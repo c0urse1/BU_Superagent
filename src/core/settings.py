@@ -51,6 +51,21 @@ class DedupQueryConfig(BaseModel):
     similarity_threshold: float = 0.95
 
 
+# Section/title context handling for chunking
+class SectionContextConfig(BaseModel):
+    enabled: bool = True
+    # consider a chunk "title-only" when 0 sentences and few chars
+    title_only_max_chars: int = 100
+    # allow cross-page merge of title-only -> next page content
+    cross_page_merge: bool = True
+    # inject the section name into the first chunk of each section
+    inject_section_title: bool = True
+    # how to prefix
+    section_prefix_format: str = "{section}: {text}"
+    # only inject on first chunk per section (recommended)
+    inject_once_per_section: bool = True
+
+
 class AppSettings(BaseModel):
     embeddings: EmbeddingConfig = EmbeddingConfig()
     kb: KBSettings = KBSettings()
@@ -70,3 +85,5 @@ class AppSettings(BaseModel):
     # New: Deduplication configuration blocks
     dedup_ingest: DedupIngestConfig = DedupIngestConfig()
     dedup_query: DedupQueryConfig = DedupQueryConfig()
+    # New: Section/TOC context controls
+    section_context: SectionContextConfig = SectionContextConfig()
