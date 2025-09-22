@@ -76,7 +76,23 @@ class SentenceAwareChunker(TextSplitterLike):
                     md["page"] = page
                 out.append(Document(page_content=text, metadata=md))
         # post-process: merge adjacent tiny chunks from same page/source
-        return self._merge_small_neighbors(out)
+        docs = self._merge_small_neighbors(out)
+
+        # NEW: cross-page merge of title-only chunks
+        try:
+            from src.core.settings import AppSettings
+
+            cfg = AppSettings().section_context
+            docs = self._merge_title_into_next_page(
+                docs,
+                title_max_chars=cfg.title_only_max_chars,
+                enable=cfg.cross_page_merge,
+            )
+        except Exception:
+            # settings not importable -> skip gracefully
+            pass
+
+        return docs
 
     def _pack_sentences(self, sentences: list[str]) -> list[str]:
         chunks: list[str] = []
@@ -154,4 +170,52 @@ class SentenceAwareChunker(TextSplitterLike):
         # If a pass performed merges, run at most one additional pass
         if len(merged) < len(docs) and _pass < 1:
             return self._merge_small_neighbors(merged, _pass=_pass + 1)
+        return merged
+
+    def _merge_title_into_next_page(
+        self, docs: list, *, title_max_chars: int, enable: bool
+    ) -> list:
+        """
+        If a chunk is a 'title-only' piece (tiny, 0 sentences) and the next chunk
+        is from the next page of the same source, prepend title into that next chunk and drop the title chunk.
+        """
+        if not enable or not docs:
+            return docs
+
+        merged: list = []
+        i = 0
+        while i < len(docs):
+            cur = docs[i]
+            if i + 1 < len(docs):
+                nxt = docs[i + 1]
+                cur_page = (cur.metadata or {}).get("page")
+                nxt_page = (nxt.metadata or {}).get("page")
+                if (
+                    _same_source(cur, nxt)
+                    and isinstance(cur_page, int)
+                    and isinstance(nxt_page, int)
+                    and nxt_page == cur_page + 1
+                    and _is_title_only_chunk(cur, title_max_chars)
+                ):
+                    # Prepend title text to next chunk
+                    title_text = (cur.page_content or "").strip()
+                    if title_text:
+                        sep = "\n" if not (nxt.page_content or "").startswith(title_text) else " "
+                        new_text = f"{title_text}{sep}{nxt.page_content or ''}".strip()
+                        # copy next chunk and modify text + metadata markers
+                        try:
+                            from langchain_core.documents import Document as _Doc  # prefer core
+                        except Exception:  # pragma: no cover
+                            from langchain.schema import Document as _Doc
+                        md = dict(nxt.metadata or {})
+                        md["title_merged_from_page"] = cur_page
+                        md["title_merged"] = True
+                        nxt = _Doc(page_content=new_text, metadata=md)
+                    # drop the title-only chunk, keep modified next
+                    merged.append(nxt)
+                    i += 2
+                    continue
+            # default: keep current
+            merged.append(cur)
+            i += 1
         return merged
