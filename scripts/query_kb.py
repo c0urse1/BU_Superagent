@@ -2,17 +2,27 @@ from __future__ import annotations
 
 import argparse
 import math
+import sys
 from pathlib import Path
-
-from src.core.settings import AppSettings
-from src.infra.embeddings.factory import build_embeddings
-from src.infra.vectorstores.chroma_store import (
-    ChromaStore,
-    collection_name_for,
-)
 
 
 def main() -> None:
+    # Ensure repository root is importable when running this script directly.
+    ROOT = Path(__file__).resolve().parents[1]
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+
+    # Import after path bootstrap (fixes E402)
+    from src.core.settings import AppSettings
+    from src.infra.embeddings.factory import build_embeddings
+    from src.infra.retrieval.assemble import assemble_context
+    from src.infra.retrieval.retriever import retrieve
+    from src.infra.vectorstores.chroma_store import (
+        ChromaStore,
+        collection_name_for,
+    )
+    from src.services.llm.chain import answer_with_citations
+
     parser = argparse.ArgumentParser(description="Query KB with metadata filters.")
     parser.add_argument("query")
     parser.add_argument("-k", type=int, default=5)
@@ -37,6 +47,11 @@ def main() -> None:
         "--no-normalize",
         action="store_true",
         help="Disable embedding vector normalization (defaults to enabled)",
+    )
+    parser.add_argument(
+        "--enforce-citations",
+        action="store_true",
+        help="Validate/auto-retry to ensure at least one citation in the answer",
     )
     args = parser.parse_args()
 
@@ -123,6 +138,29 @@ def main() -> None:
             kept_vecs.append(vec)
 
         docs = kept[: args.k]
+    # Developer testing: optionally run through prompting path
+    if args.enforce_citations:
+        # Very small stub LLM; in your environment, supply a real client with .invoke()
+        try:
+            from src.services.llm.provider import llm
+        except Exception:
+
+            class _EchoLLM:
+                def invoke(self, *, system: str, user: str) -> object:
+                    class R:
+                        def __init__(self, t: str):
+                            self.text: str = t
+
+                    return R(user)
+
+            llm = _EchoLLM()
+
+        chunks = retrieve(args.query, k=args.k, embeddings=emb_cfg)
+        ctx = assemble_context(chunks, k=args.k)
+        ans = answer_with_citations(llm, args.query, ctx)
+        print(ans)
+        return
+
     for i, d in enumerate(docs, 1):
         m = d.metadata or {}
         title = m.get("title", "<no-title>")

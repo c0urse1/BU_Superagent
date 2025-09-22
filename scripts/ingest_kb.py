@@ -2,18 +2,25 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from pathlib import Path
-
-from src.bu_kb.ingest.loaders import PdfLoader
-from src.bu_kb.ingest.pipeline import IngestionPipeline
-from src.bu_kb.ingest.splitters import TextSplitterAdapter
-from src.core.settings import AppSettings
-from src.infra.embeddings.factory import build_embeddings
-from src.infra.splitting.factory import build_splitter
-from src.infra.vectorstores.chroma_store import ChromaStore, collection_name_for
 
 
 def main() -> None:
+    # Ensure the repository root (containing the 'src' package) is importable when run directly
+    ROOT = Path(__file__).resolve().parents[1]
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+
+    # Local imports after path bootstrap to keep module-level imports clean (fixes E402)
+    from src.bu_kb.ingest.loaders import PdfLoader
+    from src.bu_kb.ingest.pipeline import IngestionPipeline
+    from src.bu_kb.ingest.splitters import TextSplitterAdapter
+    from src.core.settings import AppSettings
+    from src.infra.embeddings.factory import build_embeddings
+    from src.infra.splitting.factory import build_splitter
+    from src.infra.vectorstores.chroma_store import ChromaStore, collection_name_for
+
     ap = argparse.ArgumentParser(description="Ingest PDFs into Chroma with enriched metadata.")
     ap.add_argument("--source", default="data/pdfs", help="Folder with PDFs (recursive)")
     # Embedding overrides to avoid heavyweight downloads locally

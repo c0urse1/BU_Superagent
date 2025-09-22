@@ -139,8 +139,24 @@ class SentenceAwareChunker(TextSplitterLike):
                     overlap.insert(0, s_rev)
                     if ol_len >= self.p.chunk_overlap:
                         break
-                cur = overlap[:]  # start next chunk with sentence-level overlap
-                cur_len = sum(len(x) + len(self.p.joiner) for x in cur)
+                # If the upcoming sentence still wouldn't fit even with overlap,
+                # clear overlap to ensure progress (force-start a new chunk with s).
+                overlap_len = sum(len(x) + len(self.p.joiner) for x in overlap)
+                max_total = self.p.chunk_size + self.p.max_overflow
+                if overlap_len + s_len > max_total:
+                    # If a single sentence is too long for any chunk, emit it as its own chunk
+                    if s_len > max_total:
+                        chunks.append(s)
+                        i += 1
+                        cur = []
+                        cur_len = 0
+                    else:
+                        # Start fresh so the next loop will add s (cur is empty)
+                        cur = []
+                        cur_len = 0
+                else:
+                    cur = overlap[:]  # start next chunk with sentence-level overlap
+                    cur_len = overlap_len
 
         if cur:
             chunks.append(self.p.joiner.join(cur).strip())

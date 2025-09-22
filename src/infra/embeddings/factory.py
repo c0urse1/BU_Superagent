@@ -32,20 +32,10 @@ def build_embeddings(cfg: EmbeddingConfig) -> Embeddings:
     device = resolve_device(cfg.device)
 
     if provider == "huggingface":
-        # SentenceTransformers supports 'cuda', 'cuda:0', 'cpu', and 'mps'
-        # Optional optimization: prefer fp16 on CUDA for speed (if model supports it)
-        dtype_kwargs: dict[str, Any] = {}
-        try:
-            import torch  # noqa: F401
-
-            if str(device).startswith("cuda"):
-                dtype_kwargs["torch_dtype"] = __import__("torch").float16
-        except Exception:
-            pass
-
+        # Keep model_kwargs minimal for broad version compatibility
         return HuggingFaceEmbeddings(
             model_name=cfg.model_name,
-            model_kwargs={"device": device, **dtype_kwargs},
+            model_kwargs={"device": device},
             encode_kwargs={
                 "normalize_embeddings": cfg.normalize_embeddings,
                 "batch_size": cfg.batch_size,
