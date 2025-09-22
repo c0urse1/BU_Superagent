@@ -92,6 +92,20 @@ class SentenceAwareChunker(TextSplitterLike):
             # settings not importable -> skip gracefully
             pass
 
+        # NEW: inject section titles into the first chunk of each section
+        try:
+            from src.core.settings import AppSettings as _AS
+
+            cfg2 = _AS().section_context
+            docs = self._inject_section_titles(
+                docs,
+                enabled=cfg2.inject_section_title,
+                inject_once=cfg2.inject_once_per_section,
+                fmt=cfg2.section_prefix_format,
+            )
+        except Exception:
+            pass
+
         return docs
 
     def _pack_sentences(self, sentences: list[str]) -> list[str]:
@@ -219,3 +233,49 @@ class SentenceAwareChunker(TextSplitterLike):
             merged.append(cur)
             i += 1
         return merged
+
+    def _inject_section_titles(
+        self, docs: list, *, enabled: bool, inject_once: bool, fmt: str
+    ) -> list:
+        """
+        Prepend section title into the first chunk of each new section (once),
+        unless the text already starts with that title (avoid duplication).
+        """
+        if not enabled or not docs:
+            return docs
+
+        out: list = []
+        last_section_by_source: dict[str | None, str] = {}
+
+        for d in docs:
+            md = getattr(d, "metadata", None) or {}
+            source = md.get("source")
+            section = (md.get("section") or "").strip()
+            text = getattr(d, "page_content", "") or ""
+
+            should_inject = bool(section)
+            if (
+                inject_once
+                and source in last_section_by_source
+                and last_section_by_source.get(source) == section
+            ):
+                should_inject = False
+
+            if should_inject:
+                # avoid double prefix if already starts with the section
+                normalized_head = (text[: len(section)]).strip().lower()
+                if normalized_head != section.lower():
+                    injected = fmt.format(section=section, text=text)
+                    try:
+                        from langchain_core.documents import Document as _Doc
+                    except Exception:  # pragma: no cover
+                        from langchain.schema import Document as _Doc
+                    md2 = dict(md)
+                    md2["section_injected"] = True
+                    d = _Doc(page_content=injected, metadata=md2)
+
+                last_section_by_source[source] = section
+
+            out.append(d)
+
+        return out
