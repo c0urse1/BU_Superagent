@@ -33,6 +33,13 @@ def main() -> None:
     for i, d in enumerate(chunks, 1):
         print(f"\n--- Chunk {i} | chars={len(d.page_content)} | page={d.metadata.get('page')} ---")
         print(d.page_content)
+        # after printing chunk content, print helpful markers if present
+        print(
+            "     meta:",
+            "section_injected=" + str(d.metadata.get("section_injected")),
+            "title_merged=" + str(d.metadata.get("title_merged")),
+            "title_from_page=" + str(d.metadata.get("title_merged_from_page")),
+        )
 
 
 if __name__ == "__main__":

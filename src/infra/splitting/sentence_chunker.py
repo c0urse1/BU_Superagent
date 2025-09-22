@@ -12,6 +12,29 @@ from .sentence_splitter import split_to_sentences
 from .types import TextSplitterLike
 
 
+def _is_title_only_chunk(doc: Document, max_chars: int) -> bool:
+    """
+    A chunk is considered 'title-only' if it has no detected sentences and is very short.
+    Requires chunker to set num_sentences & char_len metadata. Falls back to text length.
+    """
+    md = getattr(doc, "metadata", None) or {}
+    try:
+        num_sentences = int(md.get("num_sentences", 0))
+    except Exception:
+        num_sentences = 0
+    try:
+        char_len = int(md.get("char_len", len(getattr(doc, "page_content", "") or "")))
+    except Exception:
+        char_len = len(getattr(doc, "page_content", "") or "")
+    return num_sentences == 0 and char_len <= int(max_chars)
+
+
+def _same_source(doc_a: Document, doc_b: Document) -> bool:
+    a = getattr(doc_a, "metadata", None) or {}
+    b = getattr(doc_b, "metadata", None) or {}
+    return a.get("source") == b.get("source")
+
+
 @dataclass
 class SentenceAwareParams:
     chunk_size: int = 1000  # soft target in characters
@@ -53,7 +76,37 @@ class SentenceAwareChunker(TextSplitterLike):
                     md["page"] = page
                 out.append(Document(page_content=text, metadata=md))
         # post-process: merge adjacent tiny chunks from same page/source
-        return self._merge_small_neighbors(out)
+        docs = self._merge_small_neighbors(out)
+
+        # NEW: cross-page merge of title-only chunks
+        try:
+            from src.core.settings import AppSettings
+
+            cfg = AppSettings().section_context
+            docs = self._merge_title_into_next_page(
+                docs,
+                title_max_chars=cfg.title_only_max_chars,
+                enable=cfg.cross_page_merge,
+            )
+        except Exception:
+            # settings not importable -> skip gracefully
+            pass
+
+        # NEW: inject section titles into the first chunk of each section
+        try:
+            from src.core.settings import AppSettings as _AS
+
+            cfg2 = _AS().section_context
+            docs = self._inject_section_titles(
+                docs,
+                enabled=cfg2.inject_section_title,
+                inject_once=cfg2.inject_once_per_section,
+                fmt=cfg2.section_prefix_format,
+            )
+        except Exception:
+            pass
+
+        return docs
 
     def _pack_sentences(self, sentences: list[str]) -> list[str]:
         chunks: list[str] = []
@@ -132,3 +185,97 @@ class SentenceAwareChunker(TextSplitterLike):
         if len(merged) < len(docs) and _pass < 1:
             return self._merge_small_neighbors(merged, _pass=_pass + 1)
         return merged
+
+    def _merge_title_into_next_page(
+        self, docs: list, *, title_max_chars: int, enable: bool
+    ) -> list:
+        """
+        If a chunk is a 'title-only' piece (tiny, 0 sentences) and the next chunk
+        is from the next page of the same source, prepend title into that next chunk and drop the title chunk.
+        """
+        if not enable or not docs:
+            return docs
+
+        merged: list = []
+        i = 0
+        while i < len(docs):
+            cur = docs[i]
+            if i + 1 < len(docs):
+                nxt = docs[i + 1]
+                cur_page = (cur.metadata or {}).get("page")
+                nxt_page = (nxt.metadata or {}).get("page")
+                if (
+                    _same_source(cur, nxt)
+                    and isinstance(cur_page, int)
+                    and isinstance(nxt_page, int)
+                    and nxt_page == cur_page + 1
+                    and _is_title_only_chunk(cur, title_max_chars)
+                ):
+                    # Prepend title text to next chunk
+                    title_text = (cur.page_content or "").strip()
+                    if title_text:
+                        sep = "\n" if not (nxt.page_content or "").startswith(title_text) else " "
+                        new_text = f"{title_text}{sep}{nxt.page_content or ''}".strip()
+                        # copy next chunk and modify text + metadata markers
+                        try:
+                            from langchain_core.documents import Document as _Doc  # prefer core
+                        except Exception:  # pragma: no cover
+                            from langchain.schema import Document as _Doc
+                        md = dict(nxt.metadata or {})
+                        md["title_merged_from_page"] = cur_page
+                        md["title_merged"] = True
+                        nxt = _Doc(page_content=new_text, metadata=md)
+                    # drop the title-only chunk, keep modified next
+                    merged.append(nxt)
+                    i += 2
+                    continue
+            # default: keep current
+            merged.append(cur)
+            i += 1
+        return merged
+
+    def _inject_section_titles(
+        self, docs: list, *, enabled: bool, inject_once: bool, fmt: str
+    ) -> list:
+        """
+        Prepend section title into the first chunk of each new section (once),
+        unless the text already starts with that title (avoid duplication).
+        """
+        if not enabled or not docs:
+            return docs
+
+        out: list = []
+        last_section_by_source: dict[str | None, str] = {}
+
+        for d in docs:
+            md = getattr(d, "metadata", None) or {}
+            source = md.get("source")
+            section = (md.get("section") or "").strip()
+            text = getattr(d, "page_content", "") or ""
+
+            should_inject = bool(section)
+            if (
+                inject_once
+                and source in last_section_by_source
+                and last_section_by_source.get(source) == section
+            ):
+                should_inject = False
+
+            if should_inject:
+                # avoid double prefix if already starts with the section
+                normalized_head = (text[: len(section)]).strip().lower()
+                if normalized_head != section.lower():
+                    injected = fmt.format(section=section, text=text)
+                    try:
+                        from langchain_core.documents import Document as _Doc
+                    except Exception:  # pragma: no cover
+                        from langchain.schema import Document as _Doc
+                    md2 = dict(md)
+                    md2["section_injected"] = True
+                    d = _Doc(page_content=injected, metadata=md2)
+
+                last_section_by_source[source] = section
+
+            out.append(d)
+
+        return out
