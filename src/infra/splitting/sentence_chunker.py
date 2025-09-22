@@ -12,6 +12,29 @@ from .sentence_splitter import split_to_sentences
 from .types import TextSplitterLike
 
 
+def _is_title_only_chunk(doc: Document, max_chars: int) -> bool:
+    """
+    A chunk is considered 'title-only' if it has no detected sentences and is very short.
+    Requires chunker to set num_sentences & char_len metadata. Falls back to text length.
+    """
+    md = getattr(doc, "metadata", None) or {}
+    try:
+        num_sentences = int(md.get("num_sentences", 0))
+    except Exception:
+        num_sentences = 0
+    try:
+        char_len = int(md.get("char_len", len(getattr(doc, "page_content", "") or "")))
+    except Exception:
+        char_len = len(getattr(doc, "page_content", "") or "")
+    return num_sentences == 0 and char_len <= int(max_chars)
+
+
+def _same_source(doc_a: Document, doc_b: Document) -> bool:
+    a = getattr(doc_a, "metadata", None) or {}
+    b = getattr(doc_b, "metadata", None) or {}
+    return a.get("source") == b.get("source")
+
+
 @dataclass
 class SentenceAwareParams:
     chunk_size: int = 1000  # soft target in characters
