@@ -116,14 +116,14 @@ class RerankerSettings(BaseSettings):
     provider: str = Field("bge", alias="RERANKER_PROVIDER")
 
     # Retrieval sizes
-    initial_top_n: int = Field(10, alias="RERANKER_INITIAL_TOP_N")  # vector hits to re-rank
+    initial_top_n: int = Field(20, alias="RERANKER_INITIAL_TOP_N")  # vector hits to re-rank
     final_top_k: int = Field(5, alias="RERANKER_FINAL_TOP_K")  # keep best K after re-ranking
 
     # BGE cross-encoder model + runtime
     bge_model_name: str = Field("BAAI/bge-reranker-v2-m3", alias="BGE_RERANKER_MODEL")
     bge_device: str = Field("auto", alias="BGE_RERANKER_DEVICE")  # "auto"|"cpu"|"cuda"|"mps"
-    bge_max_length: int = Field(512, alias="BGE_RERANKER_MAX_LEN")  # truncation length
-    bge_batch_size: int = Field(16, alias="BGE_RERANKER_BATCH")  # batch pairs for throughput
+    bge_max_length: int = Field(256, alias="BGE_RERANKER_MAX_LEN")  # truncation length
+    bge_batch_size: int = Field(8, alias="BGE_RERANKER_BATCH")  # batch pairs for throughput
 
     # Accept tolerant boolean env values and trim whitespace (e.g., "false ", "0 ")
     @field_validator("enabled", mode="before")
