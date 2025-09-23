@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     collection_name: str = Field(default="bu_knowledge")
     # Primary name as requested: embed_model; accept common env aliases
     embed_model: str = Field(
-        default="sentence-transformers/all-MiniLM-L6-v2",
+        default="intfloat/multilingual-e5-large-instruct",
         validation_alias=AliasChoices("KB_EMBED_MODEL", "KB_EMBEDDING_MODEL"),
     )
     # Keep ingestion parameters for existing pipeline components

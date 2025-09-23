@@ -43,18 +43,25 @@ git checkout -b feat/dedup-ingest-and-query; if ($LASTEXITCODE -ne 0) { git chec
 
 Embeddings are configurable via settings (see `src/core/settings.py`) and environment variables.
 
-- Default provider: HuggingFace, model `sentence-transformers/paraphrase-multilingual-mpnet-base-v2` (good for DE-heavy corpora)
-- Easy override to `sentence-transformers/all-MiniLM-L6-v2` for a smaller model
+- Default provider (infra/core path): HuggingFace with `intfloat/multilingual-e5-large-instruct`.
+	- Behavior: applies E5 instruction + prefixes automatically (`"Instruct: ..."`, `Query: `, `Passage: `) and L2-normalizes vectors. Output dim is 1024.
+	- Storage: uses a dedicated persist directory `vector_store/e5_large` to avoid dimension conflicts with prior indexes.
+- CLI path (`src/bu_kb/cli.py`) still defaults to its original model unless overridden via flags or env; infra/core default is E5.
 - Optional providers: OpenAI (opt-in), Dummy (for tests)
 
 See `.env.example` for a ready-to-copy configuration file. Examples:
 
 ```
-# Default HF (multilingual)
+# Default HF (E5 multilingual instruct)
 EMBEDDINGS__PROVIDER=huggingface
-EMBEDDINGS__MODEL_NAME=sentence-transformers/paraphrase-multilingual-mpnet-base-v2
+EMBEDDINGS__MODEL_NAME=intfloat/multilingual-e5-large-instruct
 EMBEDDINGS__DEVICE=auto           # or "cuda", "cuda:0", "cpu", "mps"
 EMBEDDINGS__BATCH_SIZE=64         # tune for throughput vs. memory
+# E5 prefixing (defaults shown)
+E5_ENABLE_PREFIX=true
+E5_QUERY_INSTRUCTION=Instruct: Given a web search query, retrieve relevant passages that answer the query
+E5_QUERY_PREFIX=Query: 
+E5_PASSAGE_PREFIX=Passage: 
 
 # OpenAI (opt-in)
 EMBEDDINGS__PROVIDER=openai
@@ -70,9 +77,9 @@ Compliance note: Only use OpenAI embeddings if your data processing and cross-bo
 
 Configure the embedding provider/model through environment variables (see `.env.example`).
 
-- Default (multilingual):
+- Default (multilingual E5):
 	- `EMBEDDINGS__PROVIDER=huggingface`
-	- `EMBEDDINGS__MODEL_NAME=sentence-transformers/paraphrase-multilingual-mpnet-base-v2`
+	- `EMBEDDINGS__MODEL_NAME=intfloat/multilingual-e5-large-instruct`
 - Alternative (smaller):
 	- `EMBEDDINGS__MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2`
 - OpenAI (opt-in):
@@ -98,14 +105,16 @@ provider    | model                                                    | R@3=0.9
 - ingest: milliseconds to add the (tiny) fixture; a proxy for ingestion performance.
 - q_avg: average query latency in milliseconds; lower is better.
 
-## Rollout plan
+## Rollout and migration notes
 
-1. Keep MiniLM as the default initially.
-2. Run the A/B evaluation locally against the multilingual MPNet model.
-3. If Recall@k improves on your DE corpus (and latency remains acceptable), flip the default model.
-4. Re-ingest the corpus into a model-scoped collection (we namespace per embedding signature):
-	 - Collection name = `collection_base` + `__` + slugged `embedding.signature`
-	 - Chunks are stamped with `embedding_sig` metadata; queries filter on the same signature.
+We switched the infra/core default to `intfloat/multilingual-e5-large-instruct`.
+
+- Re-ingest required: E5 has 1024-dim vectors, which are incompatible with older indexes. Our scripts use a dedicated directory `vector_store/e5_large` to keep indexes separate. Run:
+	- `python scripts/ingest_kb.py` (uses sentence-aware splitter by default and the E5 persist dir automatically)
+- Namespacing: Collections are still namespaced by embedding signature; each chunk is stamped with `metadata["embedding_sig"]` and queries filter on the same signature.
+- Query: `python scripts/query_kb.py --q "Welche Gesundheitsfragen sind relevant?" -k 5` will automatically select the E5 vector store when configured.
+
+If you prefer previous models, override via env or flags and (re)ingest into a separate collection.
 
 ## Compliance (OpenAI)
 
@@ -202,7 +211,7 @@ set EMBEDDINGS__DEVICE=mps && python scripts\ingest_kb.py
 # Ingest with multilingual HF model (config via .env); sentence-aware chunking by default
 python -m bu_kb.cli ingest --source data\pdfs --persist .vector_store\chroma --collection bu_knowledge
 
-# Query via infra/core path
+# Query via infra/core path (auto-uses E5 persist dir when configured)
 python scripts\query_kb.py "Welche Gesundheitsfragen sind bei der BU relevant?" -k 5
 
 # Evaluate models head-to-head

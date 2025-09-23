@@ -27,7 +27,14 @@ def load_vectorstore(persist_dir: Path | None = None, collection_name: str | Non
     Wir nutzen denselben Embedder wie beim Ingest.
     """
     s = get_settings()
-    persist = str((persist_dir or s.persist_dir).resolve())
+    # Choose E5-specific persist dir when active model is E5 and no explicit dir provided
+    if persist_dir is None:
+        model = (s.embed_model or "").lower()
+        if "intfloat/multilingual-e5" in model:
+            persist_dir = Path("vector_store/e5_large")
+        else:
+            persist_dir = s.persist_dir
+    persist = str(Path(persist_dir).resolve())
     collection = collection_name or s.collection_name
 
     # Sanity-Check: Existiert der Pfad & hat Chroma dort Daten?
