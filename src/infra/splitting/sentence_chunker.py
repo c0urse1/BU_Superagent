@@ -392,35 +392,49 @@ class SentenceChunker:
         self.cross_page_title_merge = bool(cross_page_title_merge)
 
     def chunk(self, sentences: list) -> list[dict]:
-        chunks: list[dict] = []
+        # Build chunks as lists of sentence objects first
+        chunks_sents: list[list] = []
         current: list = []
-        length = 0
+        length = 0  # sum of sentence text lengths (preserve original)
 
         for sent in sentences:
             s_text = getattr(sent, "text", "") or ""
             s_len = len(s_text)
 
-            # If adding would exceed max and we already have content, finalize
+            # If adding would exceed max and we already have content, finalize current
             if length + s_len > self.max_chars and current:
-                chunks.append(self._finalize(current))
+                chunks_sents.append(current)
                 current = []
                 length = 0
 
+            # Append sentence and update length
             current.append(sent)
             length += s_len
 
-            # When target reached or exceeded, finalize
+            # When target reached or exceeded, finalize current
             if length >= self.target_chars:
-                chunks.append(self._finalize(current))
+                chunks_sents.append(current)
                 current = []
                 length = 0
 
         if current:
-            chunks.append(self._finalize(current))
-        return chunks
+            chunks_sents.append(current)
+
+        # Enforce minimum length by merging a tiny tail into the previous chunk
+        if len(chunks_sents) >= 2:
+
+            def _chunk_len(sent_list: list) -> int:
+                return sum(len(getattr(s, "text", "") or "") for s in sent_list)
+
+            if _chunk_len(chunks_sents[-1]) < self.min_chars:
+                chunks_sents[-2].extend(chunks_sents[-1])
+                chunks_sents.pop()
+
+        return [self._finalize(slist) for slist in chunks_sents]
 
     def _finalize(self, sents: list) -> dict:
-        text = " ".join((getattr(s, "text", "") or "").strip() for s in sents).strip()
+        # Preserve original sentence text verbatim and concatenate
+        text = "".join((getattr(s, "text", "") or "") for s in sents)
         start_page = getattr(sents[0], "page", None)
         end_page = getattr(sents[-1], "page", None)
         section = getattr(sents[0], "section", None)
