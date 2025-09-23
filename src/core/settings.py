@@ -105,6 +105,18 @@ class AppSettings(BaseModel):
     # New: Environment-backed adaptive chunking settings (non-breaking; parallel to legacy fields)
     adaptive_chunking: ChunkingSettings = Field(default_factory=ChunkingSettings)
 
+    # Deduplication configuration blocks (restored for backward compatibility)
+    dedup_ingest: DedupIngestConfig = DedupIngestConfig()
+    dedup_query: DedupQueryConfig = DedupQueryConfig()
+    # Section/TOC context controls (restored)
+    section_context: SectionContextConfig = SectionContextConfig()
+
+
+# Minimal environment-backed settings facade used by pipeline helpers
+class Settings(BaseSettings):
+    # Only expose chunking knobs needed by resolve_chunking_config; safe defaults via env
+    chunking: ChunkingSettings = ChunkingSettings()
+
     # New: Deduplication configuration blocks
     dedup_ingest: DedupIngestConfig = DedupIngestConfig()
     dedup_query: DedupQueryConfig = DedupQueryConfig()
