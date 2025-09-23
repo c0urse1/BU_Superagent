@@ -3,6 +3,26 @@ from __future__ import annotations
 from typing import Literal
 
 from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings
+
+# TODO: Add chunking config with adaptive target length and overlap.
+# Goals:
+# - Provide CHUNK_TARGET_CHARS (default 500), CHUNK_MIN_CHARS (e.g. 350), CHUNK_MAX_CHARS (e.g. 700)
+# - Provide CHUNK_OVERLAP_CHARS (default 120)
+# - Keep sentence-aware splitting; do not cut sentences.
+# - Ensure section_injection and cross_page_title_merge stay supported via existing flags.
+# - Expose via environment variables and safe defaults.
+
+
+class ChunkingSettings(BaseSettings):
+    chunk_target_chars: int = Field(500, alias="CHUNK_TARGET_CHARS")
+    chunk_min_chars: int = Field(350, alias="CHUNK_MIN_CHARS")
+    chunk_max_chars: int = Field(700, alias="CHUNK_MAX_CHARS")
+    chunk_overlap_chars: int = Field(120, alias="CHUNK_OVERLAP_CHARS")
+    enforce_sentence_boundaries: bool = Field(True, alias="CHUNK_ENFORCE_SENTENCE_BOUNDARIES")
+    cross_page_title_merge: bool = Field(True, alias="CHUNK_CROSS_PAGE_TITLE_MERGE")
+    inject_section_titles: bool = Field(True, alias="CHUNK_INJECT_SECTION_TITLES")
+
 
 Provider = Literal["huggingface", "openai", "dummy"]
 
@@ -81,6 +101,9 @@ class AppSettings(BaseModel):
     chunking: AppSettings.ChunkingConfig = Field(
         default_factory=lambda: AppSettings.ChunkingConfig()
     )
+
+    # New: Environment-backed adaptive chunking settings (non-breaking; parallel to legacy fields)
+    adaptive_chunking: ChunkingSettings = Field(default_factory=ChunkingSettings)
 
     # New: Deduplication configuration blocks
     dedup_ingest: DedupIngestConfig = DedupIngestConfig()

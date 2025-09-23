@@ -39,6 +39,25 @@ def main() -> None:
         action="store_true",
         help="Disable embedding vector normalization (defaults to enabled)",
     )
+    # Adaptive chunking & context flags (non-breaking; defaults taken from AppSettings)
+    ap.add_argument("--chunk-target", type=int, default=None, help="Target chunk length in chars")
+    ap.add_argument("--chunk-min", type=int, default=None, help="Minimum chunk length in chars")
+    ap.add_argument("--chunk-max", type=int, default=None, help="Maximum chunk length in chars")
+    ap.add_argument(
+        "--chunk-overlap",
+        type=int,
+        default=None,
+        help="Overlap between chunks in chars (overrides AppSettings.chunking.chunk_overlap)",
+    )
+
+    ap.add_argument("--section-inject", action="store_true", default=None)
+    ap.add_argument("--no-section-inject", dest="section_inject", action="store_false")
+
+    ap.add_argument("--cross-page-merge", action="store_true", default=None)
+    ap.add_argument("--no-cross-page-merge", dest="cross_page_merge", action="store_false")
+
+    ap.add_argument("--sentence-boundaries", action="store_true", default=None)
+    ap.add_argument("--no-sentence-boundaries", dest="sentence_boundaries", action="store_false")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -62,6 +81,25 @@ def main() -> None:
 
     # Vector store (write path)
     store = ChromaStore(collection, persist_dir, emb)
+
+    # Apply adaptive chunking/context overrides to settings (if provided)
+    if args.chunk_target is not None:
+        cfg.adaptive_chunking.chunk_target_chars = int(args.chunk_target)
+        # For legacy splitter, also map to chunk_size
+        cfg.chunking.chunk_size = int(args.chunk_target)
+    if args.chunk_min is not None:
+        cfg.adaptive_chunking.chunk_min_chars = int(args.chunk_min)
+    if args.chunk_max is not None:
+        cfg.adaptive_chunking.chunk_max_chars = int(args.chunk_max)
+    if args.chunk_overlap is not None:
+        cfg.adaptive_chunking.chunk_overlap_chars = int(args.chunk_overlap)
+        cfg.chunking.chunk_overlap = int(args.chunk_overlap)
+    if args.section_inject is not None:
+        cfg.section_context.inject_section_title = bool(args.section_inject)
+    if args.cross_page_merge is not None:
+        cfg.section_context.cross_page_merge = bool(args.cross_page_merge)
+    if getattr(args, "sentence_boundaries", None) is not None:
+        cfg.adaptive_chunking.enforce_sentence_boundaries = bool(args.sentence_boundaries)
 
     # Build splitter from chunking config (defaults to sentence-aware)
     mode = getattr(cfg.chunking, "mode", "sentence_aware")
