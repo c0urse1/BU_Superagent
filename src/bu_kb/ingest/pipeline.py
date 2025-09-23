@@ -133,6 +133,30 @@ class IngestionPipeline:
             try:
                 docs: list[Document] = self.loader.load(str(pdf))
                 chunks = self.splitter.split(docs)
+                # Metrics: per-document chunking stats (JSONL + log)
+                try:
+                    from src.infra.metrics.chunking import log_chunking_stats
+
+                    # Build doc_meta and per-chunk length list in a tolerant way
+                    doc_meta = {
+                        "name": pdf.name,
+                        "min_chars": int(
+                            getattr(getattr(self, "settings", None), "chunk_min_chars", 350)
+                        ),
+                        "max_chars": int(
+                            getattr(getattr(self, "settings", None), "chunk_max_chars", 700)
+                        ),
+                    }
+                    # Prefer explicit char_len metadata; fallback to text length
+                    safe_chunks = []
+                    for d in chunks:
+                        md = dict(getattr(d, "metadata", None) or {})
+                        length = int(md.get("char_len", len(getattr(d, "page_content", "") or "")))
+                        safe_chunks.append({"length": length})
+                    log_chunking_stats(safe_chunks, doc_meta, logger=log)
+                except Exception:
+                    # best-effort: do not block ingestion on metrics
+                    pass
                 # Lightweight quality checks: summarize chunk stats per file
                 try:
                     # Local import to avoid hard dependency at module import time

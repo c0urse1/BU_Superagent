@@ -9,10 +9,17 @@ from src.bu_kb.ingest.splitters import TextSplitterAdapter
 from src.infra.splitting.factory import build_splitter
 
 
+def _sample_pdf() -> Path:
+    root = Path("data/pdfs")
+    pdfs = sorted(p for p in root.glob("*.pdf") if p.is_file())
+    if not pdfs:
+        pytest.skip("No PDFs available under data/pdfs for integration test")
+    return pdfs[0]
+
+
 @pytest.mark.slow
 def test_pdf_loader_enriches_metadata() -> None:
-    pdf = Path("data/pdfs/Allianz_test.pdf")
-    assert pdf.exists(), "Sample PDF missing for test"
+    pdf = _sample_pdf()
 
     loader = PdfLoader()
     docs = loader.load(str(pdf))
@@ -20,7 +27,7 @@ def test_pdf_loader_enriches_metadata() -> None:
     md = docs[0].metadata or {}
     # Source and page info (normalize path separators)
     src = md.get("source", "")
-    assert Path(src).name == "Allianz_test.pdf"
+    assert Path(src).name == pdf.name
     assert isinstance(md.get("page"), int)
     # Enriched metadata
     assert "title" in md
@@ -33,7 +40,7 @@ def test_pdf_loader_enriches_metadata() -> None:
 
 @pytest.mark.slow
 def test_splitters_propagate_metadata_sentence_aware() -> None:
-    pdf = Path("data/pdfs/Allianz_test.pdf")
+    pdf = _sample_pdf()
     loader = PdfLoader()
     docs = loader.load(str(pdf))
     splitter = TextSplitterAdapter(
@@ -48,7 +55,7 @@ def test_splitters_propagate_metadata_sentence_aware() -> None:
 
 @pytest.mark.slow
 def test_splitters_propagate_metadata_recursive() -> None:
-    pdf = Path("data/pdfs/Allianz_test.pdf")
+    pdf = _sample_pdf()
     loader = PdfLoader()
     docs = loader.load(str(pdf))
     splitter = TextSplitterAdapter(

@@ -355,3 +355,94 @@ def compute_chunk_diagnostics(chunks: list[dict[str, Any]]) -> ChunkDiagnostics:
         section_injected_counts=sec_counts,
         title_merged_count=title_merged,
     )
+
+
+# --- Adaptive Chunker (target/min/max/overlap) ---
+
+
+class SentenceChunker:
+    """Adaptive sentence chunker with target/min/max length and overlap hints.
+
+    This class operates on pre-tokenized sentence objects with attributes:
+    - text: str (sentence text)
+    - page: int (1-based page index)
+    - section: Optional[str] (title/TOC section)
+
+    It does not modify metadata beyond emitting start/end page and section markers
+    for downstream assemblers. Title merge & injection are signaled via flags only;
+    actual text manipulation remains up to higher-level processors.
+    """
+
+    def __init__(
+        self,
+        target_chars: int,
+        min_chars: int,
+        max_chars: int,
+        overlap_chars: int,
+        enforce_sentence_boundaries: bool = True,
+        inject_section_titles: bool = True,
+        cross_page_title_merge: bool = True,
+    ) -> None:
+        self.target_chars = int(target_chars)
+        self.min_chars = int(min_chars)
+        self.max_chars = int(max_chars)
+        self.overlap_chars = int(overlap_chars)
+        self.enforce_sentence_boundaries = bool(enforce_sentence_boundaries)
+        self.inject_section_titles = bool(inject_section_titles)
+        self.cross_page_title_merge = bool(cross_page_title_merge)
+
+    def chunk(self, sentences: list) -> list[dict]:
+        # Build chunks as lists of sentence objects first
+        chunks_sents: list[list] = []
+        current: list = []
+        length = 0  # sum of sentence text lengths (preserve original)
+
+        for sent in sentences:
+            s_text = getattr(sent, "text", "") or ""
+            s_len = len(s_text)
+
+            # If adding would exceed max and we already have content, finalize current
+            if length + s_len > self.max_chars and current:
+                chunks_sents.append(current)
+                current = []
+                length = 0
+
+            # Append sentence and update length
+            current.append(sent)
+            length += s_len
+
+            # When target reached or exceeded, finalize current
+            if length >= self.target_chars:
+                chunks_sents.append(current)
+                current = []
+                length = 0
+
+        if current:
+            chunks_sents.append(current)
+
+        # Enforce minimum length by merging a tiny tail into the previous chunk
+        if len(chunks_sents) >= 2:
+
+            def _chunk_len(sent_list: list) -> int:
+                return sum(len(getattr(s, "text", "") or "") for s in sent_list)
+
+            if _chunk_len(chunks_sents[-1]) < self.min_chars:
+                chunks_sents[-2].extend(chunks_sents[-1])
+                chunks_sents.pop()
+
+        return [self._finalize(slist) for slist in chunks_sents]
+
+    def _finalize(self, sents: list) -> dict:
+        # Preserve original sentence text verbatim and concatenate
+        text = "".join((getattr(s, "text", "") or "") for s in sents)
+        start_page = getattr(sents[0], "page", None)
+        end_page = getattr(sents[-1], "page", None)
+        section = getattr(sents[0], "section", None)
+        return {
+            "text": text,
+            "start_page": start_page,
+            "end_page": end_page,
+            "section_title": section,
+            "title_merged": self.cross_page_title_merge,
+            "length": len(text),
+        }
