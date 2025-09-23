@@ -147,8 +147,8 @@ class AppSettings(BaseModel):
         mode: str = Field(default="sentence_aware")  # or "recursive"
         chunk_size: int = 500
         chunk_overlap: int = 150
-        chunk_max_overflow: int = 200
-        chunk_min_merge_char_len: int = 500
+        chunk_max_overflow: int = 80
+        chunk_min_merge_char_len: int = 300
 
     chunking: AppSettings.ChunkingConfig = Field(
         default_factory=lambda: AppSettings.ChunkingConfig()
