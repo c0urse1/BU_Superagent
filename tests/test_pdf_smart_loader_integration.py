@@ -27,7 +27,7 @@ def test_pdf_loader_enriches_metadata() -> None:
     md = docs[0].metadata or {}
     # Source and page info (normalize path separators)
     src = md.get("source", "")
-    assert Path(src).name == "Allianz_test.pdf"
+    assert Path(src).name == pdf.name
     assert isinstance(md.get("page"), int)
     # Enriched metadata
     assert "title" in md
