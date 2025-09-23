@@ -197,7 +197,8 @@ def main() -> None:
             return []
         if not rerank_enabled:
             items.sort(key=lambda x: x.metadata.get("vector_score", 0.0), reverse=True)
-            return items[:final_k]
+            # vector-only default raised to 10 when reranker is disabled
+            return items[: max(final_k, 10)]
 
         # Build reranker (allow model override via flag)
         reranker = None
@@ -225,7 +226,9 @@ def main() -> None:
     reranked_items = retrieve_with_bge_rerank()
     # Fallback to plain vector retrieval when reranker returns nothing
     if not reranked_items:
-        docs = store.query(query_text, k=args.k, filter=md_filter)
+        # Use vector-only default of 10 when reranker not used
+        k_vec_only = 10 if bool(getattr(Settings().reranker, "enabled", False)) is False else args.k
+        docs = store.query(query_text, k=k_vec_only, filter=md_filter)
     else:
         docs = []  # we will print from reranked_items
 
