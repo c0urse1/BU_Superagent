@@ -9,7 +9,7 @@ from typing import Literal, cast
 
 import typer
 
-from src.core.settings import AppSettings
+from src.core.settings import AppSettings, Settings
 from src.infra.embeddings.factory import build_embeddings
 from src.infra.splitting.factory import build_splitter
 
@@ -48,6 +48,34 @@ def ingest(
     cfg_collection = collection or settings.collection_name
     # Build device-aware embeddings via infra settings
     app_cfg = AppSettings()
+    # Overlay environment-backed embedding settings (flat + legacy envs)
+    try:
+        s_emb = Settings().embeddings
+        if getattr(s_emb, "provider", None):
+            app_cfg.embeddings.provider = str(s_emb.provider)
+        if getattr(s_emb, "model_name", None):
+            app_cfg.embeddings.model_name = str(s_emb.model_name)
+        if getattr(s_emb, "device", None):
+            app_cfg.embeddings.device = str(s_emb.device)
+        if getattr(s_emb, "normalize", None) is not None:
+            app_cfg.embeddings.normalize_embeddings = bool(s_emb.normalize)
+        # E5-specific prefixing toggles (optional)
+        app_cfg.embeddings.e5_enable_prefix = bool(getattr(s_emb, "e5_enable_prefix", True))
+        app_cfg.embeddings.e5_query_instruction = str(
+            getattr(
+                s_emb,
+                "e5_query_instruction",
+                app_cfg.embeddings.e5_query_instruction,
+            )
+        )
+        app_cfg.embeddings.e5_query_prefix = str(
+            getattr(s_emb, "e5_query_prefix", app_cfg.embeddings.e5_query_prefix)
+        )
+        app_cfg.embeddings.e5_passage_prefix = str(
+            getattr(s_emb, "e5_passage_prefix", app_cfg.embeddings.e5_passage_prefix)
+        )
+    except Exception:
+        pass
     if model:
         # CLI override for model name
         app_cfg.embeddings.model_name = model
@@ -95,6 +123,16 @@ def ingest(
     )
 
     store = ChromaStore(cfg_collection, cfg_persist, emb)
+    # Explicit ingest configuration log for verification
+    logging.getLogger(__name__).info(
+        "[ingest] embeddings=%s provider=%s normalize=%s sig=%s persist_dir=%s collection=%s",
+        app_cfg.embeddings.model_name,
+        app_cfg.embeddings.provider,
+        getattr(app_cfg.embeddings, "normalize_embeddings", True),
+        app_cfg.embeddings.signature,
+        str(cfg_persist),
+        cfg_collection,
+    )
 
     # Build configurable splitter (default: sentence-aware); fall back via getattr defaults
     # Prefer core AppSettings.chunking if present, else fall back to legacy attributes

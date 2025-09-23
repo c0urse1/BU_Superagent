@@ -43,20 +43,20 @@ git checkout -b feat/dedup-ingest-and-query; if ($LASTEXITCODE -ne 0) { git chec
 
 Embeddings are configurable via settings (see `src/core/settings.py`) and environment variables.
 
-- Default provider (infra/core path): HuggingFace with `intfloat/multilingual-e5-large-instruct`.
-	- Behavior: applies E5 instruction + prefixes automatically (`"Instruct: ..."`, `Query: `, `Passage: `) and L2-normalizes vectors. Output dim is 1024.
-	- Storage: uses a dedicated persist directory `vector_store/e5_large` to avoid dimension conflicts with prior indexes.
-- CLI path (`src/bu_kb/cli.py`) still defaults to its original model unless overridden via flags or env; infra/core default is E5.
+- Default provider (infra/core and CLI): HuggingFace with `intfloat/multilingual-e5-large-instruct`.
+	- Behavior: E5 instruction + prefixes are applied automatically ("Instruct: ...", `Query: `, `Passage: `) and vectors are L2-normalized. Output dim is 1024.
+	- Storage: Option B — a single persist directory with signature-suffixed collection names. Default persist dir is `vector_store` for infra scripts and `.vector_store/chroma` for the classic CLI, but both use the same collection namespacing to prevent cross-model bleed.
 - Optional providers: OpenAI (opt-in), Dummy (for tests)
 
-See `.env.example` for a ready-to-copy configuration file. Examples:
+See `.env.example` for a ready-to-copy configuration file. Examples (flat keys are preferred):
 
 ```
 # Default HF (E5 multilingual instruct)
-EMBEDDINGS__PROVIDER=huggingface
-EMBEDDINGS__MODEL_NAME=intfloat/multilingual-e5-large-instruct
-EMBEDDINGS__DEVICE=auto           # or "cuda", "cuda:0", "cpu", "mps"
-EMBEDDINGS__BATCH_SIZE=64         # tune for throughput vs. memory
+EMBEDDING_PROVIDER=huggingface
+EMBEDDING_MODEL_NAME=intfloat/multilingual-e5-large-instruct
+EMBEDDING_DEVICE=auto           # or "cuda", "cuda:0", "cpu", "mps"
+NORMALIZE_EMBEDDINGS=true       # defaults to true unless explicitly set to a falsy value
+EMBEDDINGS__BATCH_SIZE=64       # tune for throughput vs. memory
 # E5 prefixing (defaults shown)
 E5_ENABLE_PREFIX=true
 E5_QUERY_INSTRUCTION=Instruct: Given a web search query, retrieve relevant passages that answer the query
@@ -64,8 +64,8 @@ E5_QUERY_PREFIX=Query:
 E5_PASSAGE_PREFIX=Passage: 
 
 # OpenAI (opt-in)
-EMBEDDINGS__PROVIDER=openai
-EMBEDDINGS__MODEL_NAME=text-embedding-3-small
+EMBEDDING_PROVIDER=openai
+EMBEDDING_MODEL_NAME=text-embedding-3-small
 OPENAI_API_KEY=sk-...
 # Optional for Azure/OpenAI-compatible endpoints
 # EMBEDDINGS__OPENAI_BASE_URL=https://<your-azure-endpoint>
@@ -107,12 +107,12 @@ provider    | model                                                    | R@3=0.9
 
 ## Rollout and migration notes
 
-We switched the infra/core default to `intfloat/multilingual-e5-large-instruct`.
+We switched the defaults to `intfloat/multilingual-e5-large-instruct` everywhere.
 
-- Re-ingest required: E5 has 1024-dim vectors, which are incompatible with older indexes. Our scripts use a dedicated directory `vector_store/e5_large` to keep indexes separate. Run:
-	- `python scripts/ingest_kb.py` (uses sentence-aware splitter by default and the E5 persist dir automatically)
-- Namespacing: Collections are still namespaced by embedding signature; each chunk is stamped with `metadata["embedding_sig"]` and queries filter on the same signature.
-- Query: `python scripts/query_kb.py --q "Welche Gesundheitsfragen sind relevant?" -k 5` will automatically select the E5 vector store when configured.
+- Re-ingest recommended: E5 has 1024-dim vectors, incompatible with older indexes. With Option B we use a single persist directory and isolate via signature-suffixed collection names. Run:
+	- `python scripts/ingest_kb.py` (sentence-aware splitter by default)
+- Namespacing: Collections are namespaced by embedding signature; each chunk is stamped with `metadata["embedding_sig"]` and queries filter on the same signature.
+- Query: `python scripts/query_kb.py --q "Welche Gesundheitsfragen sind relevant?" -k 5` will use the configured E5 embeddings and the namespaced collection under `vector_store`.
 
 If you prefer previous models, override via env or flags and (re)ingest into a separate collection.
 
@@ -185,7 +185,7 @@ set EMBEDDINGS__DEVICE=cuda && set EMBEDDINGS__BATCH_SIZE=128 && python -m bu_kb
 python scripts/ingest_kb.py
 
 # Force CUDA (if available)
-EMBEDDINGS__DEVICE=cuda python scripts/ingest_kb.py
+EMBEDDING_DEVICE=cuda python scripts/ingest_kb.py
 
 # Apple Silicon MPS
 EMBEDDINGS__DEVICE=mps python scripts/ingest_kb.py
@@ -195,14 +195,14 @@ Windows equivalents:
 
 ```powershell
 # PowerShell
-$env:EMBEDDINGS__DEVICE = "cuda"; python scripts\ingest_kb.py
-$env:EMBEDDINGS__DEVICE = "mps"; python scripts\ingest_kb.py
+$env:EMBEDDING_DEVICE = "cuda"; python scripts\ingest_kb.py
+$env:EMBEDDING_DEVICE = "mps"; python scripts\ingest_kb.py
 ```
 
 ```cmd
 # cmd.exe
-set EMBEDDINGS__DEVICE=cuda && python scripts\ingest_kb.py
-set EMBEDDINGS__DEVICE=mps && python scripts\ingest_kb.py
+set EMBEDDING_DEVICE=cuda && python scripts\ingest_kb.py
+set EMBEDDING_DEVICE=mps && python scripts\ingest_kb.py
 ```
 
 ## Quick usage cheatsheet
