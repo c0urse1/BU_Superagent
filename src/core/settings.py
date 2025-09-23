@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings
 
 # TODO: Add chunking config with adaptive target length and overlap.
@@ -110,6 +110,18 @@ class RerankerSettings(BaseSettings):
     bge_max_length: int = Field(512, alias="BGE_RERANKER_MAX_LEN")  # truncation length
     bge_batch_size: int = Field(16, alias="BGE_RERANKER_BATCH")  # batch pairs for throughput
 
+    # Accept tolerant boolean env values and trim whitespace (e.g., "false ", "0 ")
+    @field_validator("enabled", mode="before")
+    @classmethod
+    def _coerce_bool(cls, v):  # type: ignore[no-untyped-def]
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in ("1", "true", "yes", "on"):  # common truthy strings
+                return True
+            if s in ("0", "false", "no", "off", ""):  # common falsy/empty strings
+                return False
+        return v
+
 
 class AppSettings(BaseModel):
     embeddings: EmbeddingConfig = EmbeddingConfig()
@@ -165,7 +177,7 @@ class Settings(BaseSettings):
         e5_query_prefix: str = Field("Query: ", alias="E5_QUERY_PREFIX")
         e5_passage_prefix: str = Field("Passage: ", alias="E5_PASSAGE_PREFIX")
 
-    embeddings: EmbeddingSettings = EmbeddingSettings()
+    embeddings: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
 
     # New: Reranker env-backed settings
-    reranker: RerankerSettings = RerankerSettings()
+    reranker: RerankerSettings = Field(default_factory=RerankerSettings)

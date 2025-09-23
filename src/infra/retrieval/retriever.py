@@ -70,7 +70,14 @@ def retrieve(
     else:
         collection = collection_name_for(app.kb.collection_base, emb_cfg.signature)
         md_sig = emb_cfg.signature
-    store = ChromaStore(collection, Path(app.kb.persist_directory), emb)
+
+    # Use dedicated persist dir for E5 embeddings to avoid index clashes (1024-dim)
+    persist_dir = (
+        Path("vector_store/e5_large")
+        if "intfloat/multilingual-e5" in (emb_cfg.model_name or "").lower()
+        else Path(app.kb.persist_directory)
+    )
+    store = ChromaStore(collection, persist_dir, emb)
 
     md_filter: dict[str, Any] = {"embedding_sig": md_sig}
     if category:
