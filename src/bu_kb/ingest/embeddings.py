@@ -2,21 +2,17 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.core.settings import AppSettings
+from src.infra.embeddings.factory import build_embeddings
+
 
 def build_embedder(model_name: str) -> Any:
-    """
-    Baut einen HuggingFace-Embedder. Normalisierte Embeddings verbessern die Suche.
-    Versucht zuerst den neuen LangChain-Split, fällt sonst auf den älteren Pfad zurück.
-    """
-    try:
-        # Neuer Split (empfohlen)
-        from langchain_huggingface import HuggingFaceEmbeddings
-    except Exception:  # noqa: BLE001
-        # Älterer Pfad (Fallback)
-        from langchain_community.embeddings import HuggingFaceEmbeddings
+    """Build embeddings via infra factory to ensure E5 prefixing and normalization.
 
-    return HuggingFaceEmbeddings(
-        model_name=model_name,
-        model_kwargs={"device": "cpu"},
-        encode_kwargs={"normalize_embeddings": True},
-    )
+    The CLI passes a model_name; we adapt the AppSettings embedding config accordingly
+    and delegate to the shared factory.
+    """
+    cfg = AppSettings().embeddings
+    if model_name:
+        cfg = cfg.model_copy(update={"model_name": model_name})
+    return build_embeddings(cfg)

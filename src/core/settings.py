@@ -93,6 +93,24 @@ class SectionContextConfig(BaseModel):
     inject_once_per_section: bool = True
 
 
+# Reranker settings (environment-backed)
+class RerankerSettings(BaseSettings):
+    # enable/disable globally
+    enabled: bool = Field(True, alias="RERANKER_ENABLED")
+    # provider: "bge" (local), "none" (off). Others can be added later (e.g., "cohere").
+    provider: str = Field("bge", alias="RERANKER_PROVIDER")
+
+    # Retrieval sizes
+    initial_top_n: int = Field(10, alias="RERANKER_INITIAL_TOP_N")  # vector hits to re-rank
+    final_top_k: int = Field(5, alias="RERANKER_FINAL_TOP_K")  # keep best K after re-ranking
+
+    # BGE cross-encoder model + runtime
+    bge_model_name: str = Field("BAAI/bge-reranker-v2-m3", alias="BGE_RERANKER_MODEL")
+    bge_device: str = Field("auto", alias="BGE_RERANKER_DEVICE")  # "auto"|"cpu"|"cuda"|"mps"
+    bge_max_length: int = Field(512, alias="BGE_RERANKER_MAX_LEN")  # truncation length
+    bge_batch_size: int = Field(16, alias="BGE_RERANKER_BATCH")  # batch pairs for throughput
+
+
 class AppSettings(BaseModel):
     embeddings: EmbeddingConfig = EmbeddingConfig()
     kb: KBSettings = KBSettings()
@@ -148,3 +166,6 @@ class Settings(BaseSettings):
         e5_passage_prefix: str = Field("Passage: ", alias="E5_PASSAGE_PREFIX")
 
     embeddings: EmbeddingSettings = EmbeddingSettings()
+
+    # New: Reranker env-backed settings
+    reranker: RerankerSettings = RerankerSettings()

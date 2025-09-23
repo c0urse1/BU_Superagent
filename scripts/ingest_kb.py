@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -12,12 +13,15 @@ def main() -> None:
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
 
+    # Avoid optional torchvision import path in transformers for text-only flows
+    os.environ.setdefault("TRANSFORMERS_NO_TORCHVISION", "1")
+
     # Local imports after path bootstrap to keep module-level imports clean (fixes E402)
     from src.bu_kb.ingest.loaders import PdfLoader
     from src.bu_kb.ingest.pipeline import IngestionPipeline
     from src.bu_kb.ingest.splitters import TextSplitterAdapter
     from src.core.settings import AppSettings
-    from src.infra.embeddings.factory import build_embeddings
+    from src.infra.embeddings.factory import build_embeddings, get_embedder
     from src.infra.splitting.factory import build_splitter
     from src.infra.vectorstores.chroma_store import ChromaStore, collection_name_for
 
@@ -62,22 +66,32 @@ def main() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    # Build embeddings and collection name from core settings
+    # Build embeddings and collection name from core settings (with optional overrides)
     cfg = AppSettings()
-    # Apply optional overrides
     emb_cfg = cfg.embeddings.model_copy()
+    overrides = False
     if args.provider:
         emb_cfg.provider = args.provider
+        overrides = True
     if args.model:
         emb_cfg.model_name = args.model
+        overrides = True
     if args.device:
         emb_cfg.device = args.device
+        overrides = True
     if args.no_normalize:
         emb_cfg.normalize_embeddings = False
+        overrides = True
 
-    emb = build_embeddings(emb_cfg)
+    # Use get_embedder() when no overrides provided, else honor CLI overrides via build_embeddings
+    emb = get_embedder() if not overrides else build_embeddings(emb_cfg)
+    # Compute namespaced collection and choose persist dir; for E5, use a fresh directory (dim=1024)
+    model_name = (emb_cfg.model_name if overrides else cfg.embeddings.model_name) or ""
     collection = collection_name_for(cfg.kb.collection_base, emb_cfg.signature)
-    persist_dir = Path(cfg.kb.persist_directory)
+    if "intfloat/multilingual-e5" in model_name.lower():
+        persist_dir = Path("vector_store/e5_large")
+    else:
+        persist_dir = Path(cfg.kb.persist_directory)
 
     # Vector store (write path)
     store = ChromaStore(collection, persist_dir, emb)

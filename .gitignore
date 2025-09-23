@@ -6,6 +6,7 @@ __pycache__/
 *.egg-info/
 .env
 .vector_store/
+vector_store/
 .cache/
 .mypy_cache/
 .pytest_cache/
@@ -17,6 +18,8 @@ htmlcov/
 coverage.xml
 .coverage*
 *.log
+/.logs/
+/.logs/**
 data/**/.gitkeep
 # Keep PDFs out of git by default (dataset is local-only)
 data/**/*.pdf

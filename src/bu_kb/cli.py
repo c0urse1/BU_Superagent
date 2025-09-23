@@ -45,7 +45,6 @@ def ingest(
     setup_logging(logging.INFO)
 
     cfg_source = Path(source) if source else settings.source_dir
-    cfg_persist = Path(persist) if persist else settings.persist_dir
     cfg_collection = collection or settings.collection_name
     # Build device-aware embeddings via infra settings
     app_cfg = AppSettings()
@@ -57,6 +56,17 @@ def ingest(
     if batch_size:
         app_cfg.embeddings.batch_size = int(batch_size)
     emb = build_embeddings(app_cfg.embeddings)
+    # Choose persist dir: when E5 model is active and no explicit --persist is provided,
+    # use a dedicated directory to avoid dimension conflicts (E5 = 1024-dim vectors)
+    chosen_model = (model or app_cfg.embeddings.model_name or "").lower()
+    if persist:
+        cfg_persist = Path(persist)
+    else:
+        cfg_persist = (
+            Path("vector_store/e5_large")
+            if "intfloat/multilingual-e5" in chosen_model
+            else settings.persist_dir
+        )
     cfg_chunk_size = chunk_size or settings.chunk_size
     cfg_chunk_overlap = chunk_overlap or settings.chunk_overlap
 
