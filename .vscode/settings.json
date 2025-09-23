@@ -1,7 +1,11 @@
 {
+    // Use the workspace virtual environment Python
+    "python.defaultInterpreterPath": "C:/BU_SUPERAGENT/.venv/Scripts/python.exe",
+    // Ensure pytest is used and run via -m so we don't rely on PATH
+    "python.testing.pytestEnabled": true,
     "python.testing.pytestArgs": [
-        "."
+        "-q",
+        "tests"
     ],
-    "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true
+    "python.testing.unittestEnabled": false
 }
