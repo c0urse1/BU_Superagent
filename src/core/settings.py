@@ -1,9 +1,24 @@
 from __future__ import annotations
 
+import os
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings
+
+
+# --- Env helpers -------------------------------------------------------------
+def getenv_any(keys: list[str], default: str | None = None) -> str | None:
+    """Return the first non-empty env var among keys, else default.
+
+    Accepts keys like ["EMBEDDING_MODEL_NAME", "EMBEDDINGS__MODEL_NAME", "KB_EMBED_MODEL"].
+    """
+    for k in keys:
+        v = os.getenv(k)
+        if v not in (None, ""):
+            return v
+    return default
+
 
 # TODO: Add chunking config with adaptive target length and overlap.
 # Goals:
@@ -24,11 +39,11 @@ class ChunkingSettings(BaseSettings):
     inject_section_titles: bool = Field(True, alias="CHUNK_INJECT_SECTION_TITLES")
 
 
-Provider = Literal["huggingface", "openai", "dummy"]
+Provider = Literal["huggingface", "openai", "dummy"]  # kept for reference; field uses str
 
 
 class EmbeddingConfig(BaseModel):
-    provider: Provider = Field(default="huggingface")
+    provider: str = Field(default="huggingface")
     # Default embedding model: E5 multilingual instruct variant
     # Switched from MiniLM/MPNet to "intfloat/multilingual-e5-large-instruct".
     model_name: str = Field(default="intfloat/multilingual-e5-large-instruct")
@@ -162,10 +177,37 @@ class Settings(BaseSettings):
 
     # New: Embeddings env-backed settings (optional parallel to AppSettings.embeddings)
     class EmbeddingSettings(BaseSettings):
-        model_name: str = Field(
-            "intfloat/multilingual-e5-large-instruct", alias="EMBEDDING_MODEL_NAME"
+        # Provider: prefer EMBEDDING_PROVIDER, allow legacy KB_EMBED_PROVIDER
+        provider: str = Field(
+            default_factory=lambda: str(
+                getenv_any(["EMBEDDING_PROVIDER", "KB_EMBED_PROVIDER"], "huggingface")
+                or "huggingface"
+            ),
+            alias="EMBEDDING_PROVIDER",
         )
-        normalize: bool = Field(True, alias="EMBEDDING_NORMALIZE")
+        # Model name: prefer EMBEDDING_MODEL_NAME; accept legacy names; default to E5
+        model_name: str = Field(
+            default_factory=lambda: getenv_any(
+                [
+                    "EMBEDDING_MODEL_NAME",
+                    "EMBEDDINGS__MODEL_NAME",
+                    "KB_EMBED_MODEL",
+                ],
+                "intfloat/multilingual-e5-large-instruct",
+            )
+            or "intfloat/multilingual-e5-large-instruct",
+            alias="EMBEDDING_MODEL_NAME",
+        )
+        # Normalization: support both NORMALIZE_EMBEDDINGS and EMBEDDING_NORMALIZE (tolerant)
+        normalize: bool = Field(
+            default_factory=lambda: (  # default True unless an explicit falsy string is set
+                str(getenv_any(["NORMALIZE_EMBEDDINGS", "EMBEDDING_NORMALIZE"], "true") or "true")
+                .strip()
+                .lower()
+                not in ("false", "0", "no", "off")
+            ),
+            alias="EMBEDDING_NORMALIZE",
+        )
         device: str = Field("auto", alias="EMBEDDING_DEVICE")
 
         # E5 specific

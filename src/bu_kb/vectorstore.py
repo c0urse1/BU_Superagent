@@ -27,13 +27,9 @@ def load_vectorstore(persist_dir: Path | None = None, collection_name: str | Non
     Wir nutzen denselben Embedder wie beim Ingest.
     """
     s = get_settings()
-    # Choose E5-specific persist dir when active model is E5 and no explicit dir provided
+    # Option B: always use configured persist_dir; collection name should already be namespaced
     if persist_dir is None:
-        model = (s.embed_model or "").lower()
-        if "intfloat/multilingual-e5" in model:
-            persist_dir = Path("vector_store/e5_large")
-        else:
-            persist_dir = s.persist_dir
+        persist_dir = s.persist_dir
     persist = str(Path(persist_dir).resolve())
     collection = collection_name or s.collection_name
 

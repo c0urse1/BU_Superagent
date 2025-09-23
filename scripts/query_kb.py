@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import math
 import os
 import sys
@@ -32,6 +33,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Query KB with metadata filters.")
     parser.add_argument("query", nargs="?")
     parser.add_argument("--q", dest="q", help="Query text (alternative to positional)")
+    parser.add_argument("--question", "--query", dest="q", help="Alias for --q")
     parser.add_argument("-k", type=int, default=5)
     parser.add_argument("--category")
     parser.add_argument("--section")
@@ -46,6 +48,7 @@ def main() -> None:
         help="Embeddings provider override (default from AppSettings)",
     )
     parser.add_argument("--model", help="Embedding model name override")
+    parser.add_argument("--embed-model", dest="model", help="Alias for --model")
     parser.add_argument(
         "--device",
         help='Device override, e.g. "cpu", "cuda", "cuda:0", "mps" (default from AppSettings)',
@@ -74,9 +77,24 @@ def main() -> None:
     parser.add_argument("--top-k", type=int, help="Final Top-K to keep after reranking")
     args = parser.parse_args()
 
-    cfg = AppSettings()  # defaults; wire pydantic-settings if you want .env loading
-    # Apply optional overrides to embeddings config
+    # Simple console logging (INFO); keep message-only format like ingest
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    cfg = AppSettings()  # defaults
+    # Start from app defaults, then overlay env-backed Settings(), then CLI overrides
     emb_cfg = cfg.embeddings.model_copy()
+    try:
+        s_emb = Settings().embeddings
+        if getattr(s_emb, "provider", None):
+            emb_cfg.provider = str(s_emb.provider)
+        if getattr(s_emb, "model_name", None):
+            emb_cfg.model_name = str(s_emb.model_name)
+        if getattr(s_emb, "device", None):
+            emb_cfg.device = str(s_emb.device)
+        if getattr(s_emb, "normalize", None) is not None:
+            emb_cfg.normalize_embeddings = bool(s_emb.normalize)
+    except Exception:
+        pass
     if args.provider:
         emb_cfg.provider = args.provider
     if args.model:
@@ -113,18 +131,25 @@ def main() -> None:
 
     emb = build_embeddings(emb_cfg)
     collection = collection_name_for(cfg.kb.collection_base, emb_cfg.signature)
-
-    # Use a dedicated index path for E5 embeddings (1024-dim)
-    persist_dir = (
-        Path("vector_store/e5_large")
-        if "intfloat/multilingual-e5" in (emb_cfg.model_name or "").lower()
-        else Path(cfg.kb.persist_directory)
-    )
+    # Option B: use a single persist dir and separate models by collection name
+    persist_dir = Path("vector_store")
 
     store = ChromaStore(
         collection,
         persist_dir,
         emb,
+    )
+
+    # Log query configuration for verification (mirrors ingest log)
+    logging.getLogger(__name__).info(
+        "[query] embeddings=%s provider=%s normalize=%s sig=%s persist_dir=%s collection=%s k=%d",
+        emb_cfg.model_name,
+        emb_cfg.provider,
+        getattr(emb_cfg, "normalize_embeddings", True),
+        emb_cfg.signature,
+        str(persist_dir),
+        collection,
+        int(args.k),
     )
 
     # Build filter dict

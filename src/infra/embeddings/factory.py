@@ -29,6 +29,16 @@ from src.core.settings import EmbeddingConfig
 from src.infra.embeddings.device import resolve_device
 
 
+def _l2_normalize_nd(arr: np.ndarray) -> np.ndarray:
+    """L2-normalize a 1D or 2D numpy array with small epsilon for stability."""
+    if arr.ndim == 1:
+        denom = np.linalg.norm(arr) + 1e-12
+        return arr / denom
+    # assume 2D (N, D)
+    denom = np.linalg.norm(arr, axis=1, keepdims=True) + 1e-12
+    return arr / denom
+
+
 def build_embeddings(cfg: EmbeddingConfig) -> Embeddings:
     provider = cfg.provider.lower()
     device = resolve_device(cfg.device)
@@ -36,7 +46,8 @@ def build_embeddings(cfg: EmbeddingConfig) -> Embeddings:
     if provider == "huggingface":
         # E5 models benefit from explicit instruction/prefixing and cosine normalization.
         def _is_e5(name: str) -> bool:
-            return "intfloat/multilingual-e5" in (name or "").lower()
+            n = (name or "").lower()
+            return "e5" in n  # cover multilingual-e5 and other e5 variants
 
         # Base embedder with normalization disabled; we'll post-normalize ourselves when required
         base_hf = HuggingFaceEmbeddings(
@@ -69,8 +80,7 @@ def build_embeddings(cfg: EmbeddingConfig) -> Embeddings:
                     if not self._normalize or not arrs:
                         return arrs
                     X = np.asarray(arrs, dtype=np.float32)
-                    denom = np.linalg.norm(X, axis=1, keepdims=True) + 1e-12
-                    X = X / denom
+                    X = _l2_normalize_nd(X)
                     return X.tolist()
 
                 def embed_documents(self, texts: list[str]) -> list[list[float]]:
@@ -85,8 +95,7 @@ def build_embeddings(cfg: EmbeddingConfig) -> Embeddings:
                     if not self._normalize or not vec:
                         return vec
                     X = np.asarray([vec], dtype=np.float32)
-                    denom = np.linalg.norm(X, axis=1, keepdims=True) + 1e-12
-                    X = X / denom
+                    X = _l2_normalize_nd(X)
                     return X[0].tolist()
 
             return _E5Wrapped(base_hf)
@@ -160,7 +169,31 @@ def get_embedder() -> Embeddings:
     manually. Respects provider/model/device/normalization including E5 wrapping.
     """
     # Local import to avoid cycles at module import time
-    from src.core.settings import AppSettings
+    from src.core.settings import AppSettings, Settings
 
-    cfg = AppSettings().embeddings
+    # Start from application defaults
+    cfg = AppSettings().embeddings.model_copy()
+    # Overlay with environment-backed Settings (supports legacy env var names)
+    try:
+        s = Settings().embeddings
+        if getattr(s, "provider", None):
+            cfg.provider = str(s.provider)
+        if getattr(s, "model_name", None):
+            cfg.model_name = str(s.model_name)
+        if getattr(s, "device", None):
+            cfg.device = str(s.device)
+        if getattr(s, "normalize", None) is not None:
+            cfg.normalize_embeddings = bool(s.normalize)
+        # E5-specific toggles (optional)
+        if hasattr(s, "e5_enable_prefix"):
+            cfg.e5_enable_prefix = bool(s.e5_enable_prefix)
+        if hasattr(s, "e5_query_instruction") and s.e5_query_instruction:
+            cfg.e5_query_instruction = str(s.e5_query_instruction)
+        if hasattr(s, "e5_query_prefix") and s.e5_query_prefix:
+            cfg.e5_query_prefix = str(s.e5_query_prefix)
+        if hasattr(s, "e5_passage_prefix") and s.e5_passage_prefix:
+            cfg.e5_passage_prefix = str(s.e5_passage_prefix)
+    except Exception:
+        # Fail open if Settings cannot be constructed
+        pass
     return build_embeddings(cfg)

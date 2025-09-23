@@ -48,12 +48,18 @@ class QueryService:
         - score_threshold filtert (nur wenn relevance_scores verfügbar sind).
         """
         hits: list[QueryHit] = []
+        # Guardrail: constrain queries to current embedding signature to avoid cross-model bleed
+        try:
+            sig = AppSettings().embeddings.signature
+            md_filter: dict[str, Any] | None = {"embedding_sig": sig}
+        except Exception:  # noqa: BLE001
+            md_filter = None
 
         try:
             if use_mmr:
                 # Diversität (MMR). fetch_k kann >k sein, um Auswahl zu verbessern.
                 docs = self.vs.max_marginal_relevance_search(
-                    query, k=k, fetch_k=fetch_k or max(k * 4, 20)
+                    query, k=k, fetch_k=fetch_k or max(k * 4, 20), filter=md_filter
                 )
                 for d in docs:
                     src, page = self._safe_meta(d.metadata or {})
@@ -62,7 +68,9 @@ class QueryService:
 
             # Bevorzugt: Relevanz-Scores (0..1)
             if hasattr(self.vs, "similarity_search_with_relevance_scores"):
-                docs_scores = self.vs.similarity_search_with_relevance_scores(query, k=k)
+                docs_scores = self.vs.similarity_search_with_relevance_scores(
+                    query, k=k, filter=md_filter
+                )
                 for d, score in docs_scores:
                     src, page = self._safe_meta(d.metadata or {})
                     if score_threshold is not None and score < score_threshold:
@@ -72,7 +80,7 @@ class QueryService:
 
             # Fallback: ältere API liefert Scores anders (meist cosine-distanzähnlich)
             if hasattr(self.vs, "similarity_search_with_score"):
-                docs_scores = self.vs.similarity_search_with_score(query, k=k)
+                docs_scores = self.vs.similarity_search_with_score(query, k=k, filter=md_filter)
                 for d, score in docs_scores:
                     src, page = self._safe_meta(d.metadata or {})
                     # score-Skala kann je nach Backend variieren; kein threshold-Filter per Default
@@ -80,7 +88,7 @@ class QueryService:
                 # fallthrough to optional dedup below
 
             # Letzter Fallback: ohne Scores
-            docs = self.vs.similarity_search(query, k=k)
+            docs = self.vs.similarity_search(query, k=k, filter=md_filter)
             for d in docs:
                 src, page = self._safe_meta(d.metadata or {})
                 hits.append(QueryHit(d.page_content, src, page, None, d.metadata or {}))

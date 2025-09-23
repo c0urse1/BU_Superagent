@@ -20,7 +20,7 @@ def main() -> None:
     from src.bu_kb.ingest.loaders import PdfLoader
     from src.bu_kb.ingest.pipeline import IngestionPipeline
     from src.bu_kb.ingest.splitters import TextSplitterAdapter
-    from src.core.settings import AppSettings
+    from src.core.settings import AppSettings, Settings
     from src.infra.embeddings.factory import build_embeddings, get_embedder
     from src.infra.splitting.factory import build_splitter
     from src.infra.vectorstores.chroma_store import ChromaStore, collection_name_for
@@ -66,9 +66,21 @@ def main() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    # Build embeddings and collection name from core settings (with optional overrides)
+    # Build embeddings and collection name from core settings (with optional env + CLI overrides)
     cfg = AppSettings()
     emb_cfg = cfg.embeddings.model_copy()
+    try:
+        s_emb = Settings().embeddings
+        if getattr(s_emb, "provider", None):
+            emb_cfg.provider = str(s_emb.provider)
+        if getattr(s_emb, "model_name", None):
+            emb_cfg.model_name = str(s_emb.model_name)
+        if getattr(s_emb, "device", None):
+            emb_cfg.device = str(s_emb.device)
+        if getattr(s_emb, "normalize", None) is not None:
+            emb_cfg.normalize_embeddings = bool(s_emb.normalize)
+    except Exception:
+        pass
     overrides = False
     if args.provider:
         emb_cfg.provider = args.provider
@@ -85,16 +97,22 @@ def main() -> None:
 
     # Use get_embedder() when no overrides provided, else honor CLI overrides via build_embeddings
     emb = get_embedder() if not overrides else build_embeddings(emb_cfg)
-    # Compute namespaced collection and choose persist dir; for E5, use a fresh directory (dim=1024)
-    model_name = (emb_cfg.model_name if overrides else cfg.embeddings.model_name) or ""
+    # Compute namespaced collection and use a single persist dir (Option B)
     collection = collection_name_for(cfg.kb.collection_base, emb_cfg.signature)
-    if "intfloat/multilingual-e5" in model_name.lower():
-        persist_dir = Path("vector_store/e5_large")
-    else:
-        persist_dir = Path(cfg.kb.persist_directory)
+    persist_dir = Path("vector_store")
 
     # Vector store (write path)
     store = ChromaStore(collection, persist_dir, emb)
+    # Explicit ingest configuration log for stdout verification
+    logging.getLogger(__name__).info(
+        "[ingest] embeddings=%s provider=%s normalize=%s sig=%s persist_dir=%s collection=%s",
+        emb_cfg.model_name,
+        emb_cfg.provider,
+        getattr(emb_cfg, "normalize_embeddings", True),
+        emb_cfg.signature,
+        str(persist_dir),
+        collection,
+    )
 
     # Apply adaptive chunking/context overrides to settings (if provided)
     if args.chunk_target is not None:
