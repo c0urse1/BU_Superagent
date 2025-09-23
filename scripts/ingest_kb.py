@@ -103,6 +103,15 @@ def main() -> None:
 
     # Vector store (write path)
     store = ChromaStore(collection, persist_dir, emb)
+    # Log resolved embedding configuration at startup
+    logging.getLogger(__name__).info(
+        "embeddings_config: model=%s e5_prefix=%s normalized=%s",
+        getattr(
+            emb, "model_name", getattr(getattr(emb, "client", None), "model_name", "<unknown>")
+        ),
+        getattr(emb, "_use_e5_prefix", False),
+        True,
+    )
     # Explicit ingest configuration log for stdout verification
     logging.getLogger(__name__).info(
         "[ingest] embeddings=%s provider=%s normalize=%s sig=%s persist_dir=%s collection=%s",

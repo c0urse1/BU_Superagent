@@ -133,9 +133,16 @@ class QueryService:
                     continue
 
                 # cosine: compare to already-accepted results
-                vec: list[float] | None
+                vec: list[float] | None = None
                 try:
-                    vec = self._embedding.embed_query(txt) if self._embedding else None
+                    emb = self._embedding
+                    if emb is not None and hasattr(emb, "encode"):
+                        enc = emb.encode([txt], mode="query")
+                        if enc is not None:
+                            v0 = enc[0]
+                            vec = [float(x) for x in (v0.tolist() if hasattr(v0, "tolist") else v0)]
+                    if vec is None and emb is not None and hasattr(emb, "embed_query"):
+                        vec = emb.embed_query(txt)
                 except Exception:
                     vec = None
 
