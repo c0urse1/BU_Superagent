@@ -130,6 +130,15 @@ def main() -> None:
         parser.error("missing query text (positional or --q)")
 
     emb = build_embeddings(emb_cfg)
+    # Log resolved embedding configuration at startup
+    logging.getLogger(__name__).info(
+        "embeddings_config: model=%s e5_prefix=%s normalized=%s",
+        getattr(
+            emb, "model_name", getattr(getattr(emb, "client", None), "model_name", "<unknown>")
+        ),
+        getattr(emb, "_use_e5_prefix", False),
+        True,
+    )
     collection = collection_name_for(cfg.kb.collection_base, emb_cfg.signature)
     # Option B: use a single persist dir and separate models by collection name
     persist_dir = Path("vector_store")
@@ -250,7 +259,16 @@ def main() -> None:
 
             vec = None
             try:
-                vec = emb.embed_query(txt)
+                # Prefer SBERT-style API with explicit query mode if available
+                if hasattr(emb, "encode"):
+                    enc = emb.encode([txt], mode="query")
+                    # enc can be list[list[float]] or np.ndarray; extract first row
+                    if enc is not None:
+                        v0 = enc[0]
+                        # normalize to list[float]
+                        vec = [float(x) for x in (v0.tolist() if hasattr(v0, "tolist") else v0)]
+                if vec is None and hasattr(emb, "embed_query"):
+                    vec = emb.embed_query(txt)
             except Exception:
                 vec = None
             if vec is None:
