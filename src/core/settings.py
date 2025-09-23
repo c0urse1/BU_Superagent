@@ -33,7 +33,7 @@ class ChunkingSettings(BaseSettings):
     chunk_target_chars: int = Field(500, alias="CHUNK_TARGET_CHARS")
     chunk_min_chars: int = Field(350, alias="CHUNK_MIN_CHARS")
     chunk_max_chars: int = Field(700, alias="CHUNK_MAX_CHARS")
-    chunk_overlap_chars: int = Field(120, alias="CHUNK_OVERLAP_CHARS")
+    chunk_overlap_chars: int = Field(150, alias="CHUNK_OVERLAP_CHARS")
     enforce_sentence_boundaries: bool = Field(True, alias="CHUNK_ENFORCE_SENTENCE_BOUNDARIES")
     cross_page_title_merge: bool = Field(True, alias="CHUNK_CROSS_PAGE_TITLE_MERGE")
     inject_section_titles: bool = Field(True, alias="CHUNK_INJECT_SECTION_TITLES")
@@ -145,7 +145,7 @@ class AppSettings(BaseModel):
     # Chunking configuration (used by sentence-aware or recursive splitters)
     class ChunkingConfig(BaseModel):
         mode: str = Field(default="sentence_aware")  # or "recursive"
-        chunk_size: int = 1000
+        chunk_size: int = 500
         chunk_overlap: int = 150
         chunk_max_overflow: int = 200
         chunk_min_merge_char_len: int = 500
