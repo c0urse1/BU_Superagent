@@ -19,10 +19,10 @@ def main() -> None:
 
     # Import after path bootstrap (fixes E402)
     from src.core.settings import AppSettings, Settings
+    from src.domain.context import assemble_context
     from src.infra.embeddings.factory import build_embeddings
     from src.infra.rerankers.bge import RerankItem
     from src.infra.rerankers.factory import get_reranker
-    from src.infra.retrieval.assemble import assemble_context
     from src.infra.retrieval.retriever import normalize_metadata, retrieve
     from src.infra.vectorstores.chroma_store import (
         ChromaStore,
@@ -366,7 +366,7 @@ def main() -> None:
             ]
         else:
             chunks = retrieve(query_text, k=args.k, embeddings=emb_cfg)
-        ctx = assemble_context(chunks, k=min(args.k, len(chunks)))
+        ctx = assemble_context(chunks, k=min(args.k, len(chunks)))  # type: ignore[arg-type]
         ans = answer_with_citations(llm, query_text, ctx)
         print(ans)
         return
