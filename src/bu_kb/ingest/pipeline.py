@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import math
 import time
+import warnings
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -132,6 +133,11 @@ class IngestionPipeline:
         store: VectorStore,
         embedding_signature: str | None = None,
     ) -> None:
+        warnings.warn(
+            "IngestionPipeline is deprecated; use ImportDocumentsUseCase via SAM composition.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.loader = loader
         self.splitter = splitter
         self.store = store

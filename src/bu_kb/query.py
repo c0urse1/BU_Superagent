@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import logging
-import math
+import warnings
 from dataclasses import dataclass
-from typing import Any
 
+from src.application.use_cases.query_kb import QueryUseCase
+from src.config.providers import build_chroma_vectorstore_with_provider
 from src.core.settings import AppSettings
-
-from .vectorstore import load_vectorstore
-
-log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -17,15 +13,25 @@ class QueryHit:
     content: str
     source: str
     page: int | None
-    score: float | None  # 0..1 bei relevance_score; bei Fallback evtl. anderer Range
+    score: float | None
     metadata: dict
 
 
 class QueryService:
-    def __init__(self) -> None:
-        self.vs = load_vectorstore()
-        # Best-effort access to embedding function for cosine dedup
-        self._embedding: Any = getattr(self.vs, "embedding_function", None)
+    """Deprecated: use QueryUseCase instead.
+
+    This thin shim delegates to QueryUseCase to preserve backward compatibility
+    with legacy CLI/tests while the new SAM-based layers are adopted.
+    """
+
+    def __init__(self) -> None:  # pragma: no cover - compatibility shim
+        warnings.warn(
+            "QueryService is deprecated; use QueryUseCase via config composition.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        store = build_chroma_vectorstore_with_provider()
+        self._uc = QueryUseCase(store=store, llm=None, dedup=None)
 
     def _safe_meta(self, meta: dict) -> tuple[str, int | None]:
         source = meta.get("source") or meta.get("file_path") or meta.get("path") or "unknown"
@@ -44,155 +50,43 @@ class QueryService:
         use_mmr: bool = False,
         fetch_k: int | None = None,
         score_threshold: float | None = None,
-    ) -> list[QueryHit]:
-        """
-        Führt eine semantische Suche durch.
-        - use_mmr=True nutzt Maximal Marginal Relevance (diversere Treffer).
-        - score_threshold filtert (nur wenn relevance_scores verfügbar sind).
-        """
-        hits: list[QueryHit] = []
-        # Guardrail: constrain queries to current embedding signature to avoid cross-model bleed
+    ) -> list[QueryHit]:  # pragma: no cover - compatibility shim
+        # Constrain by embedding signature to avoid cross-model bleed
         try:
             sig = AppSettings().embeddings.signature
-            md_filter: dict[str, Any] | None = {"embedding_sig": sig}
-        except Exception:  # noqa: BLE001
-            md_filter = None
-
-        try:
-            if use_mmr:
-                # Diversität (MMR). fetch_k kann >k sein, um Auswahl zu verbessern.
-                docs = self.vs.max_marginal_relevance_search(
-                    query, k=k, fetch_k=fetch_k or max(k * 4, 20), filter=md_filter
-                )
-                for d in docs:
-                    src, page = self._safe_meta(d.metadata or {})
-                    hits.append(QueryHit(d.page_content, src, page, None, d.metadata or {}))
-                # fallthrough to optional dedup below
-                try:
-                    log.info("retrieval.stage1.vector_hits=%d", len(docs))
-                except Exception:
-                    pass
-
-            # Bevorzugt: Relevanz-Scores (0..1)
-            if hasattr(self.vs, "similarity_search_with_relevance_scores"):
-                docs_scores = self.vs.similarity_search_with_relevance_scores(
-                    query, k=k, filter=md_filter
-                )
-                for d, score in docs_scores:
-                    src, page = self._safe_meta(d.metadata or {})
-                    if score_threshold is not None and score < score_threshold:
-                        continue
-                    hits.append(QueryHit(d.page_content, src, page, float(score), d.metadata or {}))
-                # fallthrough to optional dedup below
-                try:
-                    log.info("retrieval.stage1.vector_hits=%d", len(docs_scores))
-                except Exception:
-                    pass
-
-            # Fallback: ältere API liefert Scores anders (meist cosine-distanzähnlich)
-            if hasattr(self.vs, "similarity_search_with_score"):
-                docs_scores = self.vs.similarity_search_with_score(query, k=k, filter=md_filter)
-                for d, score in docs_scores:
-                    src, page = self._safe_meta(d.metadata or {})
-                    # score-Skala kann je nach Backend variieren; kein threshold-Filter per Default
-                    hits.append(QueryHit(d.page_content, src, page, float(score), d.metadata or {}))
-                # fallthrough to optional dedup below
-                try:
-                    log.info("retrieval.stage1.vector_hits=%d", len(docs_scores))
-                except Exception:
-                    pass
-
-            # Letzter Fallback: ohne Scores
-            docs = self.vs.similarity_search(query, k=k, filter=md_filter)
-            for d in docs:
-                src, page = self._safe_meta(d.metadata or {})
-                hits.append(QueryHit(d.page_content, src, page, None, d.metadata or {}))
-            # fallthrough to optional dedup below
-            try:
-                log.info("retrieval.stage1.vector_hits=%d", len(docs))
-            except Exception:
-                pass
-
-        except Exception as e:  # noqa: BLE001
-            raise RuntimeError(f"Query fehlgeschlagen: {e}") from e
-
-        # Retrieval-time dedup (post-MMR/similarity, pre-return)
-        # - controlled by AppSettings().dedup_query
-        # - method: "cosine" or "exact"
-        def _cosine(a: list[float], b: list[float]) -> float:
-            dot = sum(x * y for x, y in zip(a, b, strict=False))
-            na = math.sqrt(sum(x * x for x in a)) or 1.0
-            nb = math.sqrt(sum(y * y for y in b)) or 1.0
-            return dot / (na * nb)
-
-        try:
-            cfg = AppSettings()
-        except Exception:  # be resilient in legacy contexts
-            cfg = type("_Cfg", (), {"dedup_query": type("_DQ", (), {"enabled": False})()})()
-
-        if getattr(cfg.dedup_query, "enabled", False) and len(hits) > 1:
-            kept: list[QueryHit] = []
-            kept_vecs: list[list[float]] = []
-            seen_norms: set[str] = set()
-            thr = float(getattr(cfg.dedup_query, "similarity_threshold", 0.95))
-            method = str(getattr(cfg.dedup_query, "method", "cosine")).lower()
-
-            for h in hits:
-                txt = (h.content or "").strip()
-                if not txt:
-                    kept.append(h)
-                    continue
-
-                if method == "exact":
-                    norm = txt.lower().replace("\n", " ").strip()
-                    if norm in seen_norms:
-                        continue
-                    seen_norms.add(norm)
-                    kept.append(h)
-                    continue
-
-                # cosine: compare to already-accepted results
-                vec: list[float] | None = None
-                try:
-                    emb = self._embedding
-                    if emb is not None and hasattr(emb, "encode"):
-                        enc = emb.encode([txt], mode="passage")
-                        if enc is not None:
-                            v0 = enc[0]
-                            vec = [float(x) for x in (v0.tolist() if hasattr(v0, "tolist") else v0)]
-                    if vec is None and emb is not None and hasattr(emb, "embed_documents"):
-                        ed = emb.embed_documents([txt])
-                        if ed:
-                            v0 = ed[0]
-                            vec = [float(x) for x in (v0.tolist() if hasattr(v0, "tolist") else v0)]
-                except Exception:
-                    vec = None
-
-                if vec is None:
-                    # Fallback to exact on embedding failure
-                    norm = txt.lower().replace("\n", " ").strip()
-                    if norm in seen_norms:
-                        continue
-                    seen_norms.add(norm)
-                    kept.append(h)
-                    continue
-
-                if any(_cosine(vec, kv) >= thr for kv in kept_vecs):
-                    continue
-
-                kept.append(h)
-                kept_vecs.append(vec)
-
-            hits = kept
-            try:
-                log.info("retrieval.stage1.after_dedup=%d", len(hits))
-            except Exception:
-                pass
-
-        # Return truncated to k after dedup (unique top-k)
-        final_hits = hits[:k]
-        try:
-            log.info("retrieval.final_hits=%d", len(final_hits))
         except Exception:
-            pass
-        return final_hits
+            sig = None
+
+        if not use_mmr and score_threshold is not None:
+            pairs = self._uc.retrieve_top_k_with_scores(
+                query,
+                k=k,
+                embedding_sig=sig,
+                score_threshold=score_threshold,
+            )
+            out: list[QueryHit] = []
+            for d, s in pairs:
+                src, page = self._safe_meta(dict(d.metadata or {}))
+                out.append(
+                    QueryHit(
+                        d.content,
+                        src,
+                        page,
+                        (float(s) if s is not None else None),
+                        dict(d.metadata or {}),
+                    )
+                )
+            return out
+
+        docs = self._uc.get_top_k(
+            query,
+            k=k,
+            embedding_sig=sig,
+            use_mmr=use_mmr,
+            fetch_k=fetch_k,
+        )
+        out2: list[QueryHit] = []
+        for d in docs:
+            src, page = self._safe_meta(dict(d.metadata or {}))
+            out2.append(QueryHit(d.content, src, page, None, dict(d.metadata or {})))
+        return out2

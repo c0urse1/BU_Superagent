@@ -22,7 +22,7 @@ from .ingest.store import ChromaStore
 from .logging_setup import setup_logging
 from .query import QueryService
 
-app = typer.Typer(add_completion=False, no_args_is_help=True, help="KB Tools")
+app = typer.Typer(add_completion=False, no_args_is_help=True, help="KB Tools (deprecated)")
 
 
 @app.command("ingest")
@@ -42,6 +42,11 @@ def ingest(
     chunk_size: int = typer.Option(None, help="Chunk size (chars)."),
     chunk_overlap: int = typer.Option(None, help="Chunk overlap (chars)."),
 ) -> None:
+    warnings.warn(
+        "bu_kb.cli is deprecated; use src.interface.cli instead (root cli.py already delegates).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     setup_logging(logging.INFO)
 
     cfg_source = Path(source) if source else settings.source_dir
@@ -186,6 +191,11 @@ def query_cmd(
         help="JSON direkt in Datei (UTF-8) schreiben; Logs werden unterdrückt",
     ),
 ) -> None:
+    warnings.warn(
+        "bu_kb.cli is deprecated; use src.interface.cli instead (root cli.py already delegates).",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     """Read-only Top-k Abfrage gegen die Chroma-Collection."""
     # Quiet logs for machine-readable output; otherwise, show INFO
     quiet = bool(as_json or outfile)
