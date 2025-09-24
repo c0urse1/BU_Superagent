@@ -142,3 +142,21 @@ class ChromaStore:
         if filter is not None:
             kwargs2["filter"] = self._normalize_filter(filter)
         return self._db.as_retriever(search_kwargs=kwargs2)
+
+    # Diversified retrieval: Maximal Marginal Relevance (MMR)
+    def max_marginal_relevance_search(
+        self,
+        text: str,
+        *,
+        k: int = 5,
+        fetch_k: int = 20,
+        lambda_mult: float = 0.7,
+        filter: dict[str, Any] | None = None,
+    ) -> list[Document]:
+        return self._db.max_marginal_relevance_search(
+            text,
+            k=k,
+            fetch_k=fetch_k,
+            lambda_mult=lambda_mult,
+            filter=self._normalize_filter(filter),
+        )

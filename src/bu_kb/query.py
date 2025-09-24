@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 from dataclasses import dataclass
 from typing import Any
@@ -7,6 +8,8 @@ from typing import Any
 from src.core.settings import AppSettings
 
 from .vectorstore import load_vectorstore
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -65,6 +68,10 @@ class QueryService:
                     src, page = self._safe_meta(d.metadata or {})
                     hits.append(QueryHit(d.page_content, src, page, None, d.metadata or {}))
                 # fallthrough to optional dedup below
+                try:
+                    log.info("retrieval.stage1.vector_hits=%d", len(docs))
+                except Exception:
+                    pass
 
             # Bevorzugt: Relevanz-Scores (0..1)
             if hasattr(self.vs, "similarity_search_with_relevance_scores"):
@@ -77,6 +84,10 @@ class QueryService:
                         continue
                     hits.append(QueryHit(d.page_content, src, page, float(score), d.metadata or {}))
                 # fallthrough to optional dedup below
+                try:
+                    log.info("retrieval.stage1.vector_hits=%d", len(docs_scores))
+                except Exception:
+                    pass
 
             # Fallback: ältere API liefert Scores anders (meist cosine-distanzähnlich)
             if hasattr(self.vs, "similarity_search_with_score"):
@@ -86,6 +97,10 @@ class QueryService:
                     # score-Skala kann je nach Backend variieren; kein threshold-Filter per Default
                     hits.append(QueryHit(d.page_content, src, page, float(score), d.metadata or {}))
                 # fallthrough to optional dedup below
+                try:
+                    log.info("retrieval.stage1.vector_hits=%d", len(docs_scores))
+                except Exception:
+                    pass
 
             # Letzter Fallback: ohne Scores
             docs = self.vs.similarity_search(query, k=k, filter=md_filter)
@@ -93,6 +108,10 @@ class QueryService:
                 src, page = self._safe_meta(d.metadata or {})
                 hits.append(QueryHit(d.page_content, src, page, None, d.metadata or {}))
             # fallthrough to optional dedup below
+            try:
+                log.info("retrieval.stage1.vector_hits=%d", len(docs))
+            except Exception:
+                pass
 
         except Exception as e:  # noqa: BLE001
             raise RuntimeError(f"Query fehlgeschlagen: {e}") from e
@@ -137,12 +156,15 @@ class QueryService:
                 try:
                     emb = self._embedding
                     if emb is not None and hasattr(emb, "encode"):
-                        enc = emb.encode([txt], mode="query")
+                        enc = emb.encode([txt], mode="passage")
                         if enc is not None:
                             v0 = enc[0]
                             vec = [float(x) for x in (v0.tolist() if hasattr(v0, "tolist") else v0)]
-                    if vec is None and emb is not None and hasattr(emb, "embed_query"):
-                        vec = emb.embed_query(txt)
+                    if vec is None and emb is not None and hasattr(emb, "embed_documents"):
+                        ed = emb.embed_documents([txt])
+                        if ed:
+                            v0 = ed[0]
+                            vec = [float(x) for x in (v0.tolist() if hasattr(v0, "tolist") else v0)]
                 except Exception:
                     vec = None
 
@@ -162,6 +184,15 @@ class QueryService:
                 kept_vecs.append(vec)
 
             hits = kept
+            try:
+                log.info("retrieval.stage1.after_dedup=%d", len(hits))
+            except Exception:
+                pass
 
         # Return truncated to k after dedup (unique top-k)
-        return hits[:k]
+        final_hits = hits[:k]
+        try:
+            log.info("retrieval.final_hits=%d", len(final_hits))
+        except Exception:
+            pass
+        return final_hits
