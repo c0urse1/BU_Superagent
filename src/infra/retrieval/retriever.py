@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,8 @@ from src.infra.vectorstores.chroma_store import (
     collection_name_for,
     get_collection_for_sig,
 )
+
+log = logging.getLogger(__name__)
 
 
 def normalize_metadata(md: dict) -> dict:
@@ -86,6 +89,10 @@ def retrieve(
         md_filter["section"] = section
 
     docs = store.query(query, k=k, filter=md_filter)
+    try:
+        log.info("retrieval.stage1.vector_hits=%d", len(docs))
+    except Exception:
+        pass
     chunks: list[dict] = []
     for d in docs:
         chunks.append(
@@ -94,6 +101,12 @@ def retrieve(
                 "metadata": normalize_metadata(getattr(d, "metadata", {}) or {}),
             }
         )
+    try:
+        # No dedup here; mirror vector count
+        log.info("retrieval.stage1.after_dedup=%d", len(docs))
+        log.info("retrieval.final_hits=%d", len(chunks))
+    except Exception:
+        pass
     return chunks
 
 

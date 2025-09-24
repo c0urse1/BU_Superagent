@@ -82,7 +82,19 @@ def _dedup_chunks_for_ingest(
         # --- SEMANTIC DEDUP (same source only) ---
         if do_sem and embedding is not None:
             try:
-                emb = embedding.embed_query(text)
+                emb = None
+                # Prefer SBERT-like batch encoder with explicit PASSAGE mode
+                if hasattr(embedding, "encode"):
+                    enc = embedding.encode([text], mode="passage")
+                    if enc is not None:
+                        v0 = enc[0]
+                        emb = [float(x) for x in (v0.tolist() if hasattr(v0, "tolist") else v0)]
+                # Fallback to document embedding API
+                if emb is None and hasattr(embedding, "embed_documents"):
+                    ed = embedding.embed_documents([text])
+                    if ed:
+                        v0 = ed[0]
+                        emb = [float(x) for x in (v0.tolist() if hasattr(v0, "tolist") else v0)]
             except Exception:  # noqa: BLE001
                 emb = None
             if emb:

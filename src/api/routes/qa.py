@@ -20,7 +20,7 @@ def post_qa(req: Any) -> dict:
 
     # Two-stage: retrieve Top-N vector hits, optionally cross-encode rerank to Top-K
     rcfg = Settings().reranker
-    initial_n = int(getattr(rcfg, "initial_top_n", 10)) if getattr(rcfg, "enabled", False) else 5
+    initial_n = int(getattr(rcfg, "initial_top_n", 10)) if getattr(rcfg, "enabled", False) else 10
     final_k = int(getattr(rcfg, "final_top_k", 5))
 
     chunks = retrieve(question, k=initial_n)

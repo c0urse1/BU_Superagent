@@ -34,7 +34,7 @@ def main() -> None:
     parser.add_argument("query", nargs="?")
     parser.add_argument("--q", dest="q", help="Query text (alternative to positional)")
     parser.add_argument("--question", "--query", dest="q", help="Alias for --q")
-    parser.add_argument("-k", type=int, default=5)
+    parser.add_argument("-k", "--k", type=int, default=5)
     parser.add_argument("--category")
     parser.add_argument("--section")
     parser.add_argument("--no-dedup", action="store_true", help="Disable retrieval-time dedup")
@@ -75,6 +75,12 @@ def main() -> None:
     )
     parser.add_argument("--top-n", type=int, help="Initial vector Top-N to consider for reranker")
     parser.add_argument("--top-k", type=int, help="Final Top-K to keep after reranking")
+    # Diversified retrieval
+    parser.add_argument(
+        "--mmr",
+        action="store_true",
+        help="Use Maximal Marginal Relevance (MMR) for diversified retrieval (fetch_k≈20, λ=0.7)",
+    )
     args = parser.parse_args()
 
     # Simple console logging (INFO); keep message-only format like ingest
@@ -151,7 +157,7 @@ def main() -> None:
 
     # Log query configuration for verification (mirrors ingest log)
     logging.getLogger(__name__).info(
-        "[query] embeddings=%s provider=%s normalize=%s sig=%s persist_dir=%s collection=%s k=%d",
+        "[query] embeddings=%s provider=%s normalize=%s sig=%s persist_dir=%s collection=%s k=%d mmr=%s",
         emb_cfg.model_name,
         emb_cfg.provider,
         getattr(emb_cfg, "normalize_embeddings", True),
@@ -159,6 +165,7 @@ def main() -> None:
         str(persist_dir),
         collection,
         int(args.k),
+        bool(getattr(args, "mmr", False)),
     )
 
     # Build filter dict
@@ -178,6 +185,10 @@ def main() -> None:
         docs_scores: list[tuple] = store.query_with_scores(
             query_text, k=initial_n, filter=md_filter
         )
+        try:
+            logging.getLogger(__name__).info("retrieval.stage1.vector_hits=%d", len(docs_scores))
+        except Exception:
+            pass
         items: list[RerankItem] = []
         for d, sc in docs_scores:
             meta = dict(getattr(d, "metadata", {}) or {})
@@ -197,7 +208,8 @@ def main() -> None:
             return []
         if not rerank_enabled:
             items.sort(key=lambda x: x.metadata.get("vector_score", 0.0), reverse=True)
-            return items[:final_k]
+            # vector-only default raised to 10 when reranker is disabled
+            return items[: max(final_k, 10)]
 
         # Build reranker (allow model override via flag)
         reranker = None
@@ -221,13 +233,33 @@ def main() -> None:
 
         return reranker.rerank(query=query_text, items=items, top_k=final_k)
 
-    # Default path (no LLM) → use reranker if enabled
-    reranked_items = retrieve_with_bge_rerank()
-    # Fallback to plain vector retrieval when reranker returns nothing
-    if not reranked_items:
-        docs = store.query(query_text, k=args.k, filter=md_filter)
+    # Retrieval paths
+    reranked_items: list[RerankItem] = []
+    from langchain_core.documents import Document as _LCDocument  # local import for typing
+
+    docs: list[_LCDocument] = []
+    used_mmr = False
+    if getattr(args, "mmr", False):
+        # Diversified retrieval via MMR; align fetch_k with reranker pool (default 20)
+        fetch_k = int(getattr(Settings().reranker, "initial_top_n", 20))
+        docs = store.max_marginal_relevance_search(
+            query_text, k=int(args.k), fetch_k=fetch_k, lambda_mult=0.7, filter=md_filter
+        )
+        try:
+            logging.getLogger(__name__).info("retrieval.stage1.vector_hits=%d", len(docs))
+        except Exception:
+            pass
+        used_mmr = True
     else:
-        docs = []  # we will print from reranked_items
+        # Default path (no LLM) → use reranker if enabled
+        reranked_items = retrieve_with_bge_rerank()
+        # Fallback to plain vector retrieval when reranker returns nothing
+        if not reranked_items:
+            # Use vector-only default of 10 when reranker not used
+            k_vec_only = (
+                10 if bool(getattr(Settings().reranker, "enabled", False)) is False else args.k
+            )
+            docs = store.query(query_text, k=k_vec_only, filter=md_filter)
 
     # Optional retrieval-time dedup (cosine default) only for plain vector results
     if getattr(cfg.dedup_query, "enabled", True) and len(docs) > 1:
@@ -259,16 +291,20 @@ def main() -> None:
 
             vec = None
             try:
-                # Prefer SBERT-style API with explicit query mode if available
+                # Prefer SBERT-style API with explicit PASSAGE mode if available
                 if hasattr(emb, "encode"):
-                    enc = emb.encode([txt], mode="query")
+                    enc = emb.encode([txt], mode="passage")
                     # enc can be list[list[float]] or np.ndarray; extract first row
                     if enc is not None:
                         v0 = enc[0]
                         # normalize to list[float]
                         vec = [float(x) for x in (v0.tolist() if hasattr(v0, "tolist") else v0)]
-                if vec is None and hasattr(emb, "embed_query"):
-                    vec = emb.embed_query(txt)
+                # Fallback to document/passages embedding API
+                if vec is None and hasattr(emb, "embed_documents"):
+                    ed = emb.embed_documents([txt])
+                    if ed:
+                        v0 = ed[0]
+                        vec = [float(x) for x in (v0.tolist() if hasattr(v0, "tolist") else v0)]
             except Exception:
                 vec = None
             if vec is None:
@@ -285,6 +321,10 @@ def main() -> None:
             kept_vecs.append(vec)
 
         docs = kept[: args.k]
+        try:
+            logging.getLogger(__name__).info("retrieval.stage1.after_dedup=%d", len(docs))
+        except Exception:
+            pass
     # Developer testing: optionally run through prompting path
     if args.enforce_citations:
         # Very small stub LLM; in your environment, supply a real client with .invoke()
@@ -307,7 +347,7 @@ def main() -> None:
 
             llm = _EchoLLM()
 
-        # Prefer reranked items for context if available; else fall back to infra retrieve()
+        # Prefer reranked items for context if available; else prefer MMR docs; else fall back to infra retrieve()
         if reranked_items:
             chunks = [
                 {
@@ -316,12 +356,28 @@ def main() -> None:
                 }
                 for it in reranked_items
             ]
+        elif used_mmr and docs:
+            chunks = [
+                {
+                    "text": (d.page_content or ""),
+                    "metadata": normalize_metadata(d.metadata or {}),
+                }
+                for d in docs[: args.k]
+            ]
         else:
             chunks = retrieve(query_text, k=args.k, embeddings=emb_cfg)
         ctx = assemble_context(chunks, k=min(args.k, len(chunks)))
         ans = answer_with_citations(llm, query_text, ctx)
         print(ans)
         return
+
+    # Final hits count (post-rerank or direct vector/MMR)
+    try:
+        logging.getLogger(__name__).info(
+            "retrieval.final_hits=%d", len(reranked_items) if reranked_items else len(docs)
+        )
+    except Exception:
+        pass
 
     if reranked_items:
         for i, it in enumerate(reranked_items, 1):
